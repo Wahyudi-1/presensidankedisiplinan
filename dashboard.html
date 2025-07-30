@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistem Kedisiplinan Siswa Sekolah</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- GANTI KODE FAVICON LAMA ANDA DENGAN BLOK KODE SEDERHANA INI -->
+
+    <!-- Menggunakan satu logo untuk semua keperluan ikon -->
+    <link rel="icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensieksperimen/main/Logo.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensieksperimen/main/Logo.png">
+
+    <!-- Nama aplikasi untuk iOS -->
+    <meta name="apple-mobile-web-app-title" content="Kedisiplinan">
+    
+    <!-- Akhir dari blok kode favicon -->
+    
+</head>
+<body>
+    <header>
+        <div class="logo">Sistem Kedisiplinan Siswa Sekolah</div>
+        <nav>
+            <span id="welcomeMessage" style="margin-right: 20px; color: var(--text-light);">Memuat...</span>
+            <button id="logoutButton" class="btn btn-danger">Logout</button>
+        </nav>
+    </header>
+
+    <nav class="section-nav">
+        <button data-section="datangSection" class="btn btn-nav">Presensi Datang</button>
+        <button data-section="pulangSection" class="btn btn-nav">Presensi Pulang</button>
+        <button data-section="rekapSection" class="btn btn-nav">Rekap Presensi</button>
+        <button data-section="disiplinSection" class="btn btn-nav">Catatan Disiplin</button>
+        <button data-section="siswaSection" class="btn btn-nav">Manajemen Siswa</button>
+       <!--  <button data-section="penggunaSection" class="btn btn-nav">Manajemen Pengguna</button> -->
+    </nav>
+
+    <main class="container">
+        <!-- Elemen Global untuk Status dan Loading -->
+        <div id="statusMessage" class="status-message" style="display: none;"></div>
+        <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 1: PRESENSI DATANG                              -->
+        <!-- ====================================================== -->
+        <div id="datangSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">Scan QR Code untuk Presensi Datang</div>
+                <div id="qrScannerDatang" style="width: 100%; max-width: 500px; margin: 20px auto; border: 1px solid var(--border-color); border-radius: var(--border-radius);"></div>
+                <div id="scanResultDatang" class="scan-result">Arahkan kamera ke QR Code Siswa</div>
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem;">Log Presensi Datang Hari Ini</h4>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th></tr></thead>
+                        <tbody id="logTableBodyDatang"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 2: PRESENSI PULANG                              -->
+        <!-- ====================================================== -->
+        <div id="pulangSection" class="content-section" style="display: none;">
+             <div class="card">
+                <div class="card-header">Scan QR Code untuk Presensi Pulang</div>
+                <div id="qrScannerPulang" style="width: 100%; max-width: 500px; margin: 20px auto; border: 1px solid var(--border-color); border-radius: var(--border-radius);"></div>
+                <div id="scanResultPulang" class="scan-result">Arahkan kamera ke QR Code Siswa</div>
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem;">Log Presensi Pulang Hari Ini</h4>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th></tr></thead>
+                        <tbody id="logTableBodyPulang"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 3: REKAP PRESENSI                               -->
+        <!-- ====================================================== -->
+        <div id="rekapSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Rekapitulasi Presensi Siswa</span>
+                    <button id="refreshRekapButton" class="btn btn-sm btn-secondary">Muat Ulang Data</button>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group"><label for="rekapFilterTanggalMulai">Dari Tanggal</label><input type="date" id="rekapFilterTanggalMulai"></div>
+                    <div class="form-group"><label for="rekapFilterTanggalSelesai">Sampai Tanggal</label><input type="date" id="rekapFilterTanggalSelesai"></div>
+                    <div class="form-group form-group-full" style="align-self: end;">
+                        <button type="button" id="filterRekapButton" class="btn btn-primary">Tampilkan Rekap</button>
+                        <button type="button" id="exportRekapButton" class="btn btn-success" style="margin-left: 10px; display: none;">Export ke Excel</button>
+                    </div>
+                </div>
+                <hr style="margin: 2rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                <h4>Hasil Rekapitulasi</h4>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Tanggal</th><th>NISN</th><th>Nama</th><th>Waktu Datang</th><th>Waktu Pulang</th><th>Status</th></tr></thead>
+                        <tbody id="rekapTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 4: CATATAN KEDISIPLINAN                         -->
+        <!-- ====================================================== -->
+        <div id="disiplinSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <span>Input Catatan Kedisiplinan Siswa</span>
+                    <!-- PERUBAHAN DI SINI: Tombol Impor Pelanggaran -->
+                    <div>
+                        <input type="file" id="importPelanggaranInput" accept=".csv" style="display: none;">
+                        <button id="importPelanggaranButton" class="btn btn-sm btn-info">Import Master Pelanggaran</button>
+                    </div>
+                    <!-- AKHIR PERUBAHAN -->
+                </div>
+                <form id="formDisiplin">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="nisnDisiplinInput">NISN Siswa</label>
+                            <input type="number" id="nisnDisiplinInput" name="nisn" placeholder="Masukkan NISN dan tekan Tab" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nama Siswa</label>
+                            <input type="text" id="namaSiswaDisiplin" disabled placeholder="Nama siswa akan muncul di sini">
+                        </div>
+                    </div>
+                    <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="tingkatDisiplinInput">Tingkat Pelanggaran</label>
+                            <input list="tingkatList" id="tingkatDisiplinInput" name="tingkat" placeholder="Pilih atau ketik tingkat" required>
+                            <datalist id="tingkatList"></datalist>
+                        </div>
+                        <div class="form-group">
+                            <label for="deskripsiDisiplinInput">Deskripsi Pelanggaran</label>
+                            <input list="deskripsiList" id="deskripsiDisiplinInput" name="deskripsi" placeholder="Pilih atau ketik deskripsi" required>
+                            <datalist id="deskripsiList"></datalist>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                        <button type="submit" id="submitDisiplinButton" class="btn btn-primary">Kumpulkan Catatan</button>
+                        <button type="button" id="exportDisiplinButton" class="btn btn-success" style="display: none;">Export Riwayat Siswa</button>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="card" style="margin-top: 2rem;">
+                 <div class="card-header">Riwayat Kedisiplinan Siswa</div>
+                 <div class="form-grid">
+                     <div class="form-group">
+                         <label for="searchNisnDisiplin">Cari Riwayat berdasarkan NISN</label>
+                         <input type="number" id="searchNisnDisiplin" placeholder="Ketik NISN untuk mencari riwayat">
+                     </div>
+                     <div class="form-group" style="align-self: end;">
+                         <button type="button" id="searchDisiplinButton" class="btn btn-secondary">Cari</button>
+                     </div>
+                 </div>
+                 <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Tingkat</th>
+                                <th>Deskripsi</th>
+                                <th>Poin</th>
+                            </tr>
+                        </thead>
+                        <tbody id="riwayatDisiplinTableBody">
+                            <tr><td colspan="4" style="text-align: center;">Masukkan NISN untuk melihat riwayat.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 5: MANAJEMEN SISWA (BAGIAN YANG DIPERBAIKI)     -->
+        <!-- ====================================================== -->
+        <div id="siswaSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <span>Manajemen Database Siswa</span>
+                    <div>
+                        <!-- PERUBAHAN DI SINI: Tombol Impor Siswa -->
+                        <input type="file" id="importSiswaInput" accept=".csv" style="display: none;">
+                        <button id="importSiswaButton" class="btn btn-sm btn-info">Import dari CSV</button>
+                        <!-- AKHIR PERUBAHAN -->
+                        <button id="exportSiswaExcelButton" class="btn btn-sm btn-success">Export ke Excel</button>
+                        <button id="exportAllQrButton" class="btn btn-sm btn-primary">Cetak Semua QR Code</button>
+                        <button id="refreshSiswaButton" class="btn btn-sm btn-secondary" style="margin-left: 5px;">Muat Ulang Data</button>
+                    </div>
+                </div>
+
+                <form id="formSiswa" class="form-container">
+                    <input type="hidden" id="formNisnOld">
+                    <div class="form-group"><label for="formNisn">NISN</label><input type="number" id="formNisn" name="NISN" placeholder="NISN Siswa" required></div>
+                    <div class="form-group"><label for="formNama">Nama Lengkap</label><input type="text" id="formNama" name="Nama" placeholder="Nama Siswa" required></div>
+                    <div class="form-group"><label for="formKelas">Kelas</label><input type="text" id="formKelas" name="Kelas" placeholder="Contoh: XII-A"></div>
+                    
+                    <div class="form-group">
+                        <label for="formWhatsappOrtu">Whatsapp Orang Tua</label>
+                        <input type="number" id="formWhatsappOrtu" name="WhatsappOrtu" placeholder="Contoh: 08123456789">
+                    </div>
+
+                    <div class="form-actions"><button type="submit" id="saveSiswaButton" class="btn btn-accent">Simpan Data Siswa</button><button type="button" id="resetSiswaButton" class="btn btn-secondary">Batal</button></div>
+                </form>
+                <hr style="margin: 2rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                <h4>Daftar Siswa Terdaftar</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>NISN</th>
+                                <th>Nama</th>
+                                <th>Kelas</th>
+                                <th>Whatsapp Ortu</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="siswaResultsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 6: MANAJEMEN PENGGUNA                           -->
+        <!-- ====================================================== -->
+        <!-- <div id="penggunaSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Manajemen Pengguna</span>
+                    <button id="refreshUsersButton" class="btn btn-sm btn-secondary">Muat Ulang Data</button>
+                </div>
+                <form id="formPengguna" class="form-container">
+                    <input type="hidden" id="formUsernameOld">
+                    <div class="form-group"><label for="formNamaPengguna">Nama Lengkap</label><input type="text" id="formNamaPengguna" name="nama" placeholder="Contoh: Budi Santoso" required></div>
+                    <div class="form-group"><label for="formUsername">Username</label><input type="text" id="formUsername" name="username" placeholder="Username untuk login" required></div>
+                    <div class="form-group"><label for="formPassword">Password</label><input type="password" id="formPassword" name="password" placeholder="Isi untuk password baru"><small class="form-helper-text">Kosongkan jika tidak ingin mengubah password.</small></div>
+                    <div class="form-group"><label for="formPeran">Peran (Role)</label><select id="formPeran" name="peran" required><option value="Admin">Admin</option><option value="Operator">Operator</option></select></div>
+                    <div class="form-actions"><button type="submit" id="savePenggunaButton" class="btn btn-accent">Simpan Pengguna</button><button type="button" id="resetPenggunaButton" class="btn btn-secondary">Batal</button></div>
+                </form>
+                <hr style="margin: 2rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                <h4>Daftar Pengguna Sistem</h4>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Nama Lengkap</th><th>Username</th><th>Peran</th><th>Aksi</th></tr></thead>
+                        <tbody id="penggunaResultsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main> -->
+
+    <!-- ====================================================== -->
+    <!-- MODAL (POPUP) UNTUK MENAMPILKAN QR CODE                -->
+    <!-- ====================================================== -->
+    <div id="qrModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content card">
+            <span class="modal-close-button">×</span>
+            <h3 id="qrModalStudentName">QR Code untuk: Nama Siswa</h3>
+            <p id="qrModalStudentNisn">NISN: 123456</p>
+            <div id="qrCodeCanvas" style="margin: 20px auto; padding: 10px; background: white; display: inline-block;"></div>
+            <button id="printQrButton" class="btn btn-primary">Cetak QR Code</button>
+        </div>
+    </div>
+
+    <!-- ====================================================== -->
+    <!-- JAVASCRIPT LIBRARIES & SCRIPT UTAMA                    -->
+    <!-- ====================================================== -->
+    
+    <!-- Library untuk Scan QR Code -->
+    <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+    
+    <!-- Library untuk Generate QR Code -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    
+    <!-- Library untuk Export ke Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- Library untuk Import dari CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <!-- Library untuk Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Script Utama Aplikasi -->
+    <script src="app.js"></script>
+</body>
+</html>
