@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Super Admin</title>
+    <link rel="stylesheet" href="style.css"> <!-- Menggunakan CSS yang sama -->
+</head>
+<body>
+    <header>
+        <div class="logo">Panel Super Admin</div>
+        <nav>
+            <span id="welcomeMessage" style="margin-right: 20px; color: var(--text-light);">Memuat...</span>
+            <button id="logoutButton" class="btn btn-danger">Logout</button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- Elemen Global -->
+        <div id="statusMessage" class="status-message" style="display: none;"></div>
+        <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
+
+        <h1>Manajemen Sistem Keseluruhan</h1>
+
+        <!-- Manajemen Sekolah -->
+        <div class="card">
+            <div class="card-header">Manajemen Sekolah</div>
+            <form id="formTambahSekolah" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
+                <div class="form-group">
+                    <label for="schoolNameInput">Nama Sekolah Baru</label>
+                    <input type="text" id="schoolNameInput" placeholder="Contoh: SMA Negeri 1 Impian" required>
+                </div>
+                <div class="form-actions" style="margin-top:0; align-self: end;">
+                    <button type="submit" class="btn btn-primary">Tambah Sekolah</button>
+                </div>
+            </form>
+            <h4 style="margin-top: 1.5rem;">Daftar Sekolah Terdaftar</h4>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Nama Sekolah</th><th>Aksi</th></tr></thead>
+                    <tbody id="schoolsTableBody">
+                        <tr><td colspan="2">Memuat data sekolah...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Manajemen Pengguna -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">Manajemen Pengguna (Guru / Admin Sekolah)</div>
+             <form id="formPengguna" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
+                <div class="form-group">
+                    <label for="userEmail">Email Pengguna Baru</label>
+                    <input type="email" id="userEmail" placeholder="email@pengguna.com" required>
+                </div>
+                 <div class="form-group">
+                    <label for="userPassword">Password Awal</label>
+                    <input type="password" id="userPassword" placeholder="Min. 6 karakter" required>
+                </div>
+                <div class="form-group">
+                    <label for="userSchoolLink">Tautkan ke Sekolah</label>
+                    <select id="userSchoolLink" required>
+                        <option value="">-- Muat data sekolah... --</option>
+                    </select>
+                </div>
+                <div class="form-actions" style="margin-top:0; align-self: end;">
+                    <button type="submit" class="btn btn-primary">Buat & Tautkan Pengguna</button>
+                </div>
+            </form>
+            <h4 style="margin-top: 1.5rem;">Daftar Pengguna Sistem</h4>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Email</th><th>Sekolah Tertaut</th><th>Aksi</th></tr></thead>
+                    <tbody id="usersTableBody">
+                        <tr><td colspan="3">Memuat data pengguna...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app-admin.js"></script>
+</body>
+</html>
