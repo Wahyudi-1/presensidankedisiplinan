@@ -2,11 +2,16 @@
  * =================================================================
  * SCRIPT UTAMA FRONTEND - SISTEM PRESENSI QR (DENGAN MODUL KEDISIPLINAN)
  * =================================================================
- * @version 4.4 - Final Auth Flow Fix
+ * @version 5.0 - Multi-Tenancy (Multi-Sekolah) Implementation
  * @author Gemini AI Expert for User
  *
- * PERUBAHAN UTAMA (v4.4):
- * - [FIX] Memperbaiki logika di `checkAuthenticationAndSetup` untuk menangani alur reset password dengan benar.
+ * PERUBAHAN UTAMA (v5.0):
+ * - Menambahkan dukungan untuk banyak sekolah dalam satu database.
+ * - Menggunakan Row-Level Security (RLS) di Supabase.
+ * - Menambahkan state `userSekolahId` untuk menyimpan ID sekolah pengguna.
+ * - Fungsi `initDashboardPage` kini mengambil ID dan nama sekolah pengguna.
+ * - Semua fungsi INSERT (saveSiswa, processQrScan, handleSubmitDisiplin)
+ *   kini menyertakan `sekolah_id` secara otomatis.
  */
 
 // ====================================================================
@@ -27,6 +32,7 @@ const AppState = {
     users: [],
     rekap: [],
     pelanggaran: [],
+    userSekolahId: null // <-- State untuk menyimpan ID sekolah pengguna
 };
 
 let qrScannerDatang, qrScannerPulang;
@@ -98,15 +104,10 @@ async function checkAuthenticationAndSetup() {
         return;
     }
 
-    // ========== PERBAIKAN LOGIKA DI SINI ==========
-    // Kondisi yang benar adalah:
-    // JIKA ada sesi DAN kita ada di halaman login DAN ini BUKAN proses recovery,
-    // MAKA alihkan ke dashboard.
     if (session && window.location.pathname.includes('index.html') && !isPasswordRecovery) {
         window.location.href = 'dashboard.html';
         return;
     }
-    // ========== AKHIR DARI PERBAIKAN ==========
 
     if (session) {
         const welcomeEl = document.getElementById('welcomeMessage');
@@ -239,6 +240,7 @@ function stopQrScanner(type) {
 async function processQrScan(nisn, type) {
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
     
+    // RLS akan otomatis memfilter siswa berdasarkan sekolah pengguna
     const { data: siswa, error: siswaError } = await supabase
         .from('siswa')
         .select('nama')
@@ -246,7 +248,7 @@ async function processQrScan(nisn, type) {
         .single();
         
     if (siswaError || !siswa) {
-        const errorMessage = `Siswa dengan NISN ${nisn} tidak terdaftar.`;
+        const errorMessage = `Siswa dengan NISN ${nisn} tidak terdaftar di sekolah Anda.`;
         resultEl.className = 'scan-result error';
         resultEl.textContent = errorMessage;
         playSound('error');
@@ -265,7 +267,7 @@ async function processQrScan(nisn, type) {
         .eq('nisn_siswa', nisn)
         .gte('waktu_datang', today.toISOString())
         .lt('waktu_datang', tomorrow.toISOString())
-        .maybeSingle();
+        .maybeSingle(); // RLS juga berlaku di sini
 
     if (cekError) {
         const errorMessage = `Gagal memeriksa data presensi: ${cekError.message}`;
@@ -286,7 +288,11 @@ async function processQrScan(nisn, type) {
 
         const { error: insertError } = await supabase
             .from('presensi')
-            .insert({ nisn_siswa: nisn, waktu_datang: new Date() });
+            .insert({ 
+                nisn_siswa: nisn, 
+                waktu_datang: new Date(),
+                sekolah_id: AppState.userSekolahId // <-- Menyertakan ID sekolah
+            });
         
         if (insertError) {
             resultEl.className = 'scan-result error';
@@ -300,7 +306,7 @@ async function processQrScan(nisn, type) {
             loadAndRenderDailyLog('datang');
         }
 
-    } else {
+    } else { // Presensi Pulang
         if (!presensiHariIni) {
             const errorMessage = `DITOLAK: ${siswa.nama} belum melakukan presensi datang hari ini.`;
             resultEl.className = 'scan-result error';
@@ -321,7 +327,7 @@ async function processQrScan(nisn, type) {
             .from('presensi')
             .update({ waktu_pulang: new Date() })
             .eq('nisn_siswa', nisn)
-            .gte('waktu_datang', today.toISOString());
+            .gte('waktu_datang', today.toISOString()); // RLS akan memastikan kita hanya bisa update data sekolah kita
 
         if (updateError) {
             resultEl.className = 'scan-result error';
@@ -345,7 +351,8 @@ async function loadAndRenderDailyLog(type) {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-
+    
+    // RLS otomatis memfilter data berdasarkan sekolah pengguna
     const { data, error } = await supabase
         .from('presensi')
         .select('waktu_datang, waktu_pulang, siswa (nisn, nama)')
@@ -363,18 +370,13 @@ async function loadAndRenderDailyLog(type) {
         ? `<tr><td colspan="3" style="text-align: center;">Belum ada data presensi hari ini.</td></tr>`
         : data.map(row => {
             const waktuTampil = type === 'datang' ? row.waktu_datang : row.waktu_pulang;
-            
-            if (type === 'pulang' && !waktuTampil) {
-                return '';
-            }
-            
+            if (type === 'pulang' && !waktuTampil) return '';
             return `
                 <tr>
                     <td>${new Date(waktuTampil).toLocaleTimeString('id-ID')}</td>
                     <td>${row.siswa.nisn}</td>
                     <td>${row.siswa.nama}</td>
-                </tr>
-            `;
+                </tr>`;
         }).join('');
 }
 
@@ -385,14 +387,10 @@ async function filterAndRenderRekap() {
     if (!startDateStr || !endDateStr) return showStatusMessage('Harap pilih rentang tanggal.', 'error');
 
     showLoading(true);
+    // RLS otomatis memfilter data berdasarkan sekolah pengguna
     const { data, error } = await supabase
         .from('presensi')
-        .select(`
-            waktu_datang,
-            waktu_pulang,
-            status,
-            siswa ( nisn, nama )
-        `)
+        .select(`waktu_datang, waktu_pulang, status, siswa ( nisn, nama )`)
         .gte('waktu_datang', startDateStr)
         .lte('waktu_datang', `${endDateStr}T23:59:59`);
 
@@ -417,7 +415,7 @@ function renderRekapTable(data) {
                 <td data-label="Nama">${row.siswa.nama}</td>
                 <td data-label="Datang">${datangDate.toLocaleTimeString('id-ID')}</td>
                 <td data-label="Pulang">${row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID') : 'Belum'}</td>
-                <td data-label="Status">${row.status}</td>
+                <td data-label="Status">${row.status || '-'}</td>
             </tr>`
         }).join('');
 }
@@ -439,6 +437,7 @@ async function loadSiswaAndRenderTable(force = false) {
         return;
     }
     showLoading(true);
+    // RLS otomatis memfilter data berdasarkan sekolah pengguna
     const { data, error } = await supabase.from('siswa').select('*').order('nama', { ascending: true });
     showLoading(false);
     
@@ -474,12 +473,13 @@ async function saveSiswa() {
         nisn: document.getElementById('formNisn').value,
         nama: document.getElementById('formNama').value,
         kelas: document.getElementById('formKelas').value,
-        whatsapp_ortu: document.getElementById('formWhatsappOrtu').value || null
+        whatsapp_ortu: document.getElementById('formWhatsappOrtu').value || null,
+        sekolah_id: AppState.userSekolahId // <-- Menyertakan ID sekolah
     };
 
     showLoading(true);
     const { error } = oldNisn
-        ? await supabase.from('siswa').update(siswaData).eq('nisn', oldNisn)
+        ? await supabase.from('siswa').update(siswaData).eq('nisn', oldNisn) // RLS memastikan hanya bisa update data sekolah kita
         : await supabase.from('siswa').insert(siswaData);
     showLoading(false);
 
@@ -511,6 +511,7 @@ function resetFormSiswa() {
 async function deleteSiswaHandler(nisn) {
     if (confirm(`Yakin ingin menghapus siswa dengan NISN: ${nisn}?`)) {
         showLoading(true);
+        // RLS memastikan hanya bisa hapus data sekolah kita
         const { error } = await supabase.from('siswa').delete().eq('nisn', nisn);
         showLoading(false);
 
@@ -534,42 +535,27 @@ async function handleSiswaFileSelect(event) {
                 return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
             }
             const dataToInsert = results.data
-                // FILTER INI SANGAT PENTING UNTUK MENGHAPUS BARIS KOSONG
-                .filter(row => {
-                    const nisn = row.NISN || row.Nisn || row.nisn;
-                    return nisn && nisn.toString().trim() !== ''; 
-                })
+                .filter(row => row.NISN || row.Nisn || row.nisn)
                 .map(row => ({
                     nisn: row.NISN || row.Nisn || row.nisn,
                     nama: row.Nama || row.nama,
                     kelas: row.Kelas || row.kelas,
-                    whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null
+                    whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
+                    sekolah_id: AppState.userSekolahId // <-- Menyertakan ID sekolah
                 }));
             
             if (dataToInsert.length === 0) {
                 showLoading(false);
-                return showStatusMessage('Tidak ada data siswa yang valid untuk diimpor setelah memfilter baris kosong.', 'info');
+                return showStatusMessage('Tidak ada data siswa yang valid untuk diimpor.', 'info');
             }
 
-           // Di dalam fungsi handleSiswaFileSelect, di dalam 'complete:'
-
-            // ... (kode .filter() dan .map() tetap sama) ...
-            
-            // ========== PERBAIKI BARIS DI BAWAH INI ==========
             const { error } = await supabase
                 .from('siswa')
                 .upsert(dataToInsert, { onConflict: 'nisn' });
-            // ========== AKHIR DARI PERBAIKAN ==========
             
             showLoading(false);
             
-            if (error) {
-                // Kita bisa tambahkan penanganan error yang lebih spesifik jika mau
-                if (error.message.includes('violates unique constraint')) {
-                     return showStatusMessage(`Gagal Impor: Terdapat NISN duplikat di dalam file CSV Anda.`, 'error');
-                }
-                return showStatusMessage(`Gagal Impor: ${error.message}`, 'error');
-            }
+            if (error) return showStatusMessage(`Gagal Impor: ${error.message}`, 'error');
             
             showStatusMessage(`${dataToInsert.length} data siswa berhasil diimpor/diperbarui!`, 'success');
             await loadSiswaAndRenderTable(true);
@@ -596,6 +582,7 @@ async function handlePelanggaranFileSelect(event) {
             const dataToInsert = results.data.map(row => ({
                 tingkat: row.Tingkat, deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, poin: row.Poin
             }));
+            // Tabel pelanggaran bersifat global, tidak perlu sekolah_id
             const { error } = await supabase.from('pelanggaran').insert(dataToInsert);
             showLoading(false);
             if (error) return showStatusMessage(`Gagal impor: ${error.message}`, 'error');
@@ -665,14 +652,6 @@ function exportAllQrCodes() {
 }
 
 
-// --- FUNGSI MANAJEMEN PENGGUNA ---
-// Dinonaktifkan sesuai keputusan untuk mengelola via dashboard Supabase
-// async function loadUsers() { console.warn("Fungsi loadUsers perlu implementasi RLS yang aman."); }
-// async function saveUser() { console.warn("Fungsi saveUser perlu dipindah ke Edge Function."); }
-// async function deleteUserHandler() { console.warn("Fungsi deleteUserHandler perlu dipindah ke Edge Function."); }
-//function resetFormPengguna() { document.getElementById('formPengguna').reset(); }
-
-
 // --- FUNGSI MODUL KEDISIPLINAN ---
 async function loadPelanggaranData() {
     const { data, error } = await supabase.from('pelanggaran').select('*');
@@ -715,7 +694,11 @@ async function handleSubmitDisiplin(event) {
     const poin = pelanggaran ? pelanggaran.poin : 0;
 
     const { error } = await supabase.from('catatan_disiplin').insert({
-        nisn_siswa: nisn, tingkat, deskripsi, poin
+        nisn_siswa: nisn, 
+        tingkat, 
+        deskripsi, 
+        poin,
+        sekolah_id: AppState.userSekolahId // <-- Menyertakan ID sekolah
     });
 
     if (error) return showStatusMessage(`Gagal menyimpan catatan: ${error.message}`, 'error');
@@ -730,6 +713,7 @@ async function handleSearchRiwayatDisiplin() {
     if (!nisn) return showStatusMessage("Harap masukkan NISN untuk mencari riwayat.", "info");
     
     showLoading(true);
+    // RLS otomatis memfilter data berdasarkan sekolah pengguna
     const { data, error } = await supabase
         .from('catatan_disiplin')
         .select('*')
@@ -771,14 +755,8 @@ function setupDashboardListeners() {
                 section.style.display = section.id === sectionId ? 'block' : 'none';
             });
             const actions = {
-                datangSection: () => {
-                    startQrScanner('datang');
-                    loadAndRenderDailyLog('datang');
-                },
-                pulangSection: () => {
-                    startQrScanner('pulang');
-                    loadAndRenderDailyLog('pulang');
-                },
+                datangSection: () => { startQrScanner('datang'); loadAndRenderDailyLog('datang'); },
+                pulangSection: () => { startQrScanner('pulang'); loadAndRenderDailyLog('pulang'); },
                 rekapSection: () => {
                     const today = new Date().toISOString().slice(0, 10);
                     document.getElementById('rekapFilterTanggalMulai').value = today;
@@ -797,18 +775,14 @@ function setupDashboardListeners() {
     document.getElementById('exportRekapButton')?.addEventListener('click', exportRekapToExcel);
     document.getElementById('formSiswa')?.addEventListener('submit', (e) => { e.preventDefault(); saveSiswa(); });
     document.getElementById('resetSiswaButton')?.addEventListener('click', resetFormSiswa);
-    document.querySelector('#qrModal .modal-close-button')?.addEventListener('click', () => {
-        document.getElementById('qrModal').style.display = 'none';
-    });
+    document.querySelector('#qrModal .modal-close-button')?.addEventListener('click', () => document.getElementById('qrModal').style.display = 'none');
     document.getElementById('printQrButton')?.addEventListener('click', printQrCode);
     document.getElementById('exportSiswaExcelButton')?.addEventListener('click', exportSiswaToExcel);
     document.getElementById('exportAllQrButton')?.addEventListener('click', exportAllQrCodes);
-
     document.getElementById('importSiswaButton')?.addEventListener('click', () => document.getElementById('importSiswaInput').click());
     document.getElementById('importSiswaInput')?.addEventListener('change', handleSiswaFileSelect);
     document.getElementById('importPelanggaranButton')?.addEventListener('click', () => document.getElementById('importPelanggaranInput').click());
     document.getElementById('importPelanggaranInput')?.addEventListener('change', handlePelanggaranFileSelect);
-
     document.getElementById('nisnDisiplinInput')?.addEventListener('blur', handleNisnDisiplinInput);
     document.getElementById('tingkatDisiplinInput')?.addEventListener('input', handleTingkatChange);
     document.getElementById('formDisiplin')?.addEventListener('submit', handleSubmitDisiplin);
@@ -817,6 +791,32 @@ function setupDashboardListeners() {
 
 async function initDashboardPage() {
     await checkAuthenticationAndSetup();
+
+    // === BLOK KODE BARU UNTUK MENGAMBIL ID DAN NAMA SEKOLAH ===
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.user.user_metadata.sekolah_id) {
+        AppState.userSekolahId = session.user.user_metadata.sekolah_id;
+
+        const schoolNameEl = document.getElementById('schoolNameDisplay');
+        if (schoolNameEl) {
+            const { data: schoolData, error } = await supabase
+                .from('sekolah')
+                .select('nama_sekolah')
+                .eq('id', AppState.userSekolahId)
+                .single();
+
+            if (schoolData) {
+                schoolNameEl.textContent = `[${schoolData.nama_sekolah}]`;
+            }
+        }
+    } else {
+        // Jika tidak ada sekolah_id, cegah pengguna melakukan aksi dan paksa logout
+        alert('Error: Akun Anda tidak terhubung ke sekolah manapun. Hubungi administrator.');
+        handleLogout();
+        return; // Hentikan eksekusi lebih lanjut
+    }
+    // === AKHIR BLOK KODE BARU ===
+
     setupAuthListener();
     setupDashboardListeners();
     await loadSiswaAndRenderTable();
@@ -824,15 +824,9 @@ async function initDashboardPage() {
     document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
 }
 
-// Ganti fungsi initLoginPage yang lama dengan versi baru ini
-
 async function initLoginPage() {
-    // Panggil fungsi ini terlebih dahulu
     setupPasswordToggle();
-    
-    // Cek URL secara proaktif saat halaman dimuat
     if (window.location.hash.includes('type=recovery')) {
-        // Jika ini adalah alur reset password, langsung tampilkan formnya
         const loginBox = document.querySelector('.login-box');
         const resetContainer = document.getElementById('resetPasswordContainer');
         if (loginBox && resetContainer) {
@@ -840,19 +834,14 @@ async function initLoginPage() {
             resetContainer.style.display = 'grid';
         }
     }
-
-    // Tetap pasang listener untuk menangani event secara dinamis
     setupAuthListener();
-
-    // Jalankan pengecekan sesi setelah listener dipasang
     await checkAuthenticationAndSetup();
-
-    // Pasang listener untuk link lupa password
     document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
         e.preventDefault();
         handleForgotPassword();
     });
 }
+
 // ====================================================================
 // TAHAP 5: TITIK MASUK APLIKASI (ENTRY POINT)
 // ====================================================================
