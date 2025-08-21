@@ -2,20 +2,22 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 1.0
+ * @version 1.1 - Fixed Admin API Call
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
  * - Bergantung pada RLS bypass dan fungsi database (PostgreSQL Functions)
  *   yang telah dibuat di backend.
+ * - [FIX v1.1] Mengubah panggilan `supabase.auth.admin.listUsers()` menjadi
+ *   `supabase.rpc('admin_get_all_users')` untuk menghindari error 401.
  */
 
 // ====================================================================
 // TAHAP 1: KONFIGURASI GLOBAL DAN STATE
 // ====================================================================
-const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
+const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
 const { createClient } = window.supabase;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -65,7 +67,7 @@ async function loadAdminData() {
     // Promise.all untuk memuat data sekolah dan pengguna secara bersamaan
     const [schoolsResponse, usersResponse] = await Promise.all([
         supabase.from('sekolah').select('*').order('nama_sekolah'),
-        supabase.auth.admin.listUsers() // Memerlukan hak admin, tapi kita panggil dari frontend yg sudah diamankan
+        supabase.rpc('admin_get_all_users') // [FIX] Memanggil fungsi database yang aman
     ]);
     showLoading(false);
 
@@ -73,7 +75,7 @@ async function loadAdminData() {
     if (usersResponse.error) return showStatusMessage(`Gagal memuat pengguna: ${usersResponse.error.message}`, 'error');
     
     AppStateAdmin.schools = schoolsResponse.data;
-    AppStateAdmin.users = usersResponse.data.users;
+    AppStateAdmin.users = usersResponse.data; // [FIX] Data pengguna langsung dari response
 
     renderSchoolsTable();
     renderUsersTable();
@@ -101,7 +103,7 @@ function renderUsersTable() {
     const tableBody = document.getElementById('usersTableBody');
     if (!tableBody) return;
     tableBody.innerHTML = AppStateAdmin.users.map(user => {
-        const schoolId = user.user_metadata?.sekolah_id;
+        const schoolId = user.raw_user_meta_data?.sekolah_id;
         // Cari nama sekolah berdasarkan ID yang ada di metadata pengguna
         const linkedSchool = AppStateAdmin.schools.find(s => s.id === schoolId);
         const schoolName = linkedSchool ? linkedSchool.nama_sekolah : '<span style="color: #e74c3c;">Belum Tertaut</span>';
@@ -111,7 +113,6 @@ function renderUsersTable() {
                 <td>${user.email}</td>
                 <td>${schoolName}</td>
                 <td>
-                    <!-- Tombol hapus perlu fungsi admin_delete_user di backend -->
                     <button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>
                 </td>
             </tr>
@@ -205,13 +206,22 @@ async function handleDeleteSchool(schoolId, schoolName) {
     await loadAdminData();
 }
 
-// Catatan: Fungsi ini memerlukan fungsi `admin_delete_user` di backend.
 async function handleDeleteUser(userId, userEmail) {
     if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) {
         return;
     }
     alert("Fungsionalitas hapus pengguna memerlukan pembuatan fungsi 'admin_delete_user' di SQL Editor untuk keamanan.");
-    // Contoh pemanggilan jika fungsi sudah dibuat:
+    // Untuk mengaktifkan, buat fungsi SQL berikut:
+    // CREATE OR REPLACE FUNCTION public.admin_delete_user(user_id UUID)
+    // RETURNS TEXT AS $$
+    // BEGIN
+    //   IF NOT public.is_super_admin() THEN RAISE EXCEPTION 'Akses Ditolak'; END IF;
+    //   DELETE FROM auth.users WHERE id = user_id;
+    //   RETURN 'Pengguna berhasil dihapus';
+    // END;
+    // $$ LANGUAGE plpgsql SECURITY DEFINER;
+    //
+    // Lalu uncomment kode di bawah ini:
     /*
     showLoading(true);
     const { error } = await supabase.rpc('admin_delete_user', { user_id: userId });
