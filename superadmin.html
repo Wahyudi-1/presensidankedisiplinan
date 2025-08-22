@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel Super Admin</title>
-    <link rel="stylesheet" href="style.css"> <!-- Menggunakan CSS yang sama -->
+    <!-- Menggunakan CSS yang sama dengan dashboard utama untuk konsistensi -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
@@ -16,13 +21,17 @@
     </header>
 
     <main class="container">
-        <!-- Elemen Global -->
+        <!-- ====================================================== -->
+        <!-- Elemen Global untuk Notifikasi dan Loading             -->
+        <!-- ====================================================== -->
         <div id="statusMessage" class="status-message" style="display: none;"></div>
         <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
 
         <h1>Manajemen Sistem Keseluruhan</h1>
 
-        <!-- Manajemen Sekolah -->
+        <!-- ====================================================== -->
+        <!-- Bagian 1: Manajemen Sekolah                            -->
+        <!-- ====================================================== -->
         <div class="card">
             <div class="card-header">Manajemen Sekolah</div>
             <form id="formTambahSekolah" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
@@ -37,15 +46,22 @@
             <h4 style="margin-top: 1.5rem;">Daftar Sekolah Terdaftar</h4>
             <div class="table-container">
                 <table>
-                    <thead><tr><th>Nama Sekolah</th><th>Aksi</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Nama Sekolah</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
                     <tbody id="schoolsTableBody">
-                        <tr><td colspan="2">Memuat data sekolah...</td></tr>
+                        <tr><td colspan="2" style="text-align: center;">Memuat data sekolah...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Manajemen Pengguna -->
+        <!-- ====================================================== -->
+        <!-- Bagian 2: Manajemen Pengguna                           -->
+        <!-- ====================================================== -->
         <div class="card" style="margin-top: 2rem;">
             <div class="card-header">Manajemen Pengguna (Guru / Admin Sekolah)</div>
              <form id="formPengguna" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
@@ -70,15 +86,24 @@
             <h4 style="margin-top: 1.5rem;">Daftar Pengguna Sistem</h4>
             <div class="table-container">
                 <table>
-                    <thead><tr><th>Email</th><th>Sekolah Tertaut</th><th>Aksi</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Sekolah Tertaut</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
                     <tbody id="usersTableBody">
-                        <tr><td colspan="3">Memuat data pengguna...</td></tr>
+                        <tr><td colspan="3" style="text-align: center;">Memuat data pengguna...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </main>
 
+    <!-- ====================================================== -->
+    <!-- JAVASCRIPT LIBRARIES & SCRIPT UTAMA                    -->
+    <!-- ====================================================== -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app-admin.js"></script>
 </body>
