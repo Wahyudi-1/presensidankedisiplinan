@@ -2,16 +2,15 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 1.3 - Final Version
+ * @version 2.0 - Switched to pg_net RPC Backend
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
- * - Bergantung pada RLS bypass di backend.
- * - Menggunakan Supabase Edge Functions untuk tugas-tugas administratif
- *   yang memerlukan hak akses tinggi (seperti membuat pengguna).
- * - Menggunakan fungsi RPC (PostgreSQL) untuk tugas-tugas yang aman
- *   dilakukan di database (seperti mengubah metadata).
+ * - [v2.0] Semua logika admin yang memerlukan hak akses tinggi (seperti
+ *   membuat pengguna) kini memanggil fungsi RPC (PostgreSQL) yang
+ *   menggunakan pg_net, sepenuhnya menggantikan Edge Functions.
+ *   Ini menyelesaikan semua masalah CORS.
  */
 
 // ====================================================================
@@ -175,23 +174,17 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-    // Memanggil Edge Function yang aman untuk membuat pengguna
-    const { data, error } = await supabase.functions.invoke('admin-user-manager', {
-        body: {
-            action: 'createUser',
-            payload: {
-                email: email,
-                password: password,
-                schoolId: schoolId
-            }
-        }
+    // Panggilan ini sekarang akan memanggil fungsi pg_net yang baru dan andal
+    const { data, error } = await supabase.rpc('admin_create_user_for_school', {
+        user_email: email,
+        user_password: password,
+        target_school_id: schoolId
     });
     showLoading(false);
 
     if (error) return showStatusMessage(`Gagal membuat pengguna: ${error.message}`, 'error');
-    
-    // Response dari Edge Function mungkin memiliki struktur yang berbeda, sesuaikan jika perlu
-    const userEmail = data.user ? data.user.email : email;
+
+    const userEmail = data.email || email;
     showStatusMessage(`Pengguna ${userEmail} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
     await loadAdminData();
@@ -268,7 +261,7 @@ async function handleDeleteUser(userId, userEmail) {
     if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) {
         return;
     }
-    alert("Fungsionalitas hapus pengguna memerlukan pembuatan Edge Function atau fungsi SQL 'admin_delete_user' untuk keamanan.");
+    alert("Fungsionalitas hapus pengguna memerlukan pembuatan fungsi SQL 'admin_delete_user' untuk keamanan.");
 }
 
 
