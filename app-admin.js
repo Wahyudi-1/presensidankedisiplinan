@@ -1,15 +1,14 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DEFINITIF V4.1)
+ * SCRIPT PANEL SUPER ADMIN - (VERSI FINAL SEDERHANA)
  * =================================================================
- * @version 4.1 - Robust Session Check
+ * @version 5.0 - Simplified Final Version
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - [FINAL ROBUST FIX] Memperbaiki `checkSuperAdminAccess` untuk
- *   memastikan sesi Supabase sepenuhnya dimuat sebelum mencoba
- *   memverifikasi peran pengguna dari tabel `pengguna`. Ini akan
- *   mencegah 'Akses Ditolak' palsu karena kondisi race.
+ * - [FINAL SIMPLIFICATION] Menyederhanakan `checkSuperAdminAccess` secara drastis.
+ *   Tidak lagi menggunakan onAuthStateChange yang rumit. Langsung panggil
+ *   getSession dan lanjutkan. Ini akan memperbaiki masalah data tidak dimuat.
  */
 
 // ====================================================================
@@ -27,69 +26,41 @@ const AppStateAdmin = {
 };
 
 // ====================================================================
-// KEAMANAN & INISIALISASI (DENGAN PERBAIKAN)
+// INISIALISASI
 // ====================================================================
 
-async function checkSuperAdminAccess() {
-    // [LANGKAH PERBAIKAN 1] Dengarkan event SIGNED_IN
-    // Ini memastikan kita tidak melewatkan sesi yang sedang dimuat.
-    supabase.auth.onAuthStateChange(async (event, session) => {
-        // Kita hanya tertarik pada saat pengguna pertama kali login
-        // atau saat sesi berhasil dimuat dari local storage.
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-            if (session) {
-                // [LANGKAH PERBAIKAN 2] Lakukan pengecekan HANYA setelah sesi terkonfirmasi.
-                const { data: userProfile, error } = await supabase
-                    .from('pengguna')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
+async function initializeAdminPage() {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-                if (error || userProfile?.role !== 'super_admin') {
-                    handleAccessDenied();
-                } else {
-                    // Jika lolos, lanjutkan memuat aplikasi.
-                    document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
-                    await loadAdminData();
-                    setupEventListeners();
-                }
-            } else {
-                // Jika tidak ada sesi sama sekali setelah loading selesai.
-                handleAccessDenied();
-            }
-        }
-    });
-
-    // Cek tambahan untuk kasus jika sesi sudah ada tapi event tidak terpicu
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-        // Jika getSession() secara sinkron sudah tahu tidak ada sesi,
-        // kita bisa langsung tolak akses tanpa menunggu event.
-        // Beri sedikit jeda untuk memastikan event tidak akan terpicu.
-        setTimeout(() => {
-             const currentSession = supabase.auth.session();
-             if (!currentSession) {
-                handleAccessDenied();
-             }
-        }, 500);
+    if (sessionError || !session) {
+        alert('Sesi tidak ditemukan atau error. Silakan login kembali.');
+        window.location.replace('index.html');
+        return;
     }
-}
 
-function handleAccessDenied() {
-    alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
-    // Jangan lakukan signOut di sini, karena bisa menyebabkan loop tak terbatas.
-    window.location.replace('index.html');
-}
+    const { data: userProfile, error: profileError } = await supabase
+        .from('pengguna')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
 
+    if (profileError || userProfile?.role !== 'super_admin') {
+        alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
+        window.location.replace('index.html');
+        return;
+    }
+
+    // Jika semua pemeriksaan lolos, lanjutkan
+    document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
+    setupEventListeners();
+    await loadAdminData(); // Panggil pemuatan data di sini
+}
 
 async function loadAdminData() {
     showLoading(true);
     const [schoolsResponse, usersResponse] = await Promise.all([
         supabase.from('sekolah').select('*').order('nama_sekolah'),
-        supabase.from('pengguna').select(`
-            id, email, sekolah_id, role,
-            sekolah ( nama_sekolah )
-        `)
+        supabase.from('pengguna').select(`id, email, sekolah_id, role, sekolah ( nama_sekolah )`)
     ]);
     showLoading(false);
 
@@ -104,7 +75,7 @@ async function loadAdminData() {
     populateSchoolDropdown();
 }
 
-// ... SEMUA FUNGSI LAINNYA TETAP SAMA SEPERTI VERSI 4.0 ...
+// ... SEMUA FUNGSI LAINNYA TETAP SAMA ...
 // (render, setup, handleCreate, handleChange, handleDelete, helpers)
 function renderSchoolsTable() {
     const tableBody = document.getElementById('schoolsTableBody');
@@ -240,4 +211,4 @@ function showStatusMessage(message, type = 'info', duration = 5000) {
 // ====================================================================
 // ENTRY POINT
 // ====================================================================
-document.addEventListener('DOMContentLoaded', checkSuperAdminAccess);
+document.addEventListener('DOMContentLoaded', initializeAdminPage);
