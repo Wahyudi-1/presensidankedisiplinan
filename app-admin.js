@@ -1,14 +1,16 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (VERSI FINAL SEDERHANA)
+ * SCRIPT PANEL SUPER ADMIN - (SOLUSI HYBRID)
  * =================================================================
- * @version 5.0 - Simplified Final Version
+ * @version 5.1 - Hybrid Initialization
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - [FINAL SIMPLIFICATION] Menyederhanakan `checkSuperAdminAccess` secara drastis.
- *   Tidak lagi menggunakan onAuthStateChange yang rumit. Langsung panggil
- *   getSession dan lanjutkan. Ini akan memperbaiki masalah data tidak dimuat.
+ * - Menggunakan pendekatan hybrid untuk inisialisasi halaman.
+ * - Menggunakan flag 'initialized' untuk memastikan logika pengecekan peran
+ *   dan pemuatan data hanya berjalan SATU KALI, baik dipicu oleh
+ *   getSession() langsung maupun oleh onAuthStateChange.
+ * - Ini menyelesaikan masalah akses ditolak DAN data tidak dimuat.
  */
 
 // ====================================================================
@@ -25,19 +27,29 @@ const AppStateAdmin = {
     users: []
 };
 
+// Flag untuk mencegah inisialisasi ganda
+let isInitialized = false;
+
 // ====================================================================
-// INISIALISASI
+// INISIALISASI DAN KEAMANAN (PENDEKATAN HYBRID)
 // ====================================================================
 
-async function initializeAdminPage() {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-        alert('Sesi tidak ditemukan atau error. Silakan login kembali.');
+// Fungsi inti yang akan menjalankan pemeriksaan dan memuat aplikasi
+async function runInitialization(session) {
+    // Jika sudah diinisialisasi, jangan lakukan apa-apa lagi.
+    if (isInitialized) return;
+    
+    // Jika tidak ada sesi, tolak akses.
+    if (!session) {
+        alert('Sesi tidak valid. Silakan login kembali.');
         window.location.replace('index.html');
         return;
     }
 
+    // Tandai bahwa proses inisialisasi telah dimulai.
+    isInitialized = true;
+    
+    // Lakukan pemeriksaan peran dari tabel 'pengguna'.
     const { data: userProfile, error: profileError } = await supabase
         .from('pengguna')
         .select('role')
@@ -50,11 +62,34 @@ async function initializeAdminPage() {
         return;
     }
 
-    // Jika semua pemeriksaan lolos, lanjutkan
+    // Jika semua pemeriksaan berhasil, muat sisa aplikasi.
     document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
     setupEventListeners();
-    await loadAdminData(); // Panggil pemuatan data di sini
+    await loadAdminData();
 }
+
+
+// "Pendengar" yang akan berjalan jika sesi dimuat secara asinkron.
+supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        runInitialization(session);
+    } else if (event === 'SIGNED_OUT') {
+        isInitialized = false; // Reset flag saat logout
+        window.location.replace('index.html');
+    }
+});
+
+
+// Panggilan langsung saat halaman dimuat.
+async function tryInitialLoad() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+        // Jika sesi sudah tersedia, langsung jalankan inisialisasi.
+        runInitialization(session);
+    }
+    // Jika sesi belum ada, kita biarkan onAuthStateChange yang menanganinya.
+}
+
 
 async function loadAdminData() {
     showLoading(true);
@@ -75,7 +110,7 @@ async function loadAdminData() {
     populateSchoolDropdown();
 }
 
-// ... SEMUA FUNGSI LAINNYA TETAP SAMA ...
+// ... SEMUA FUNGSI LAINNYA TETAP SAMA SEPERTI VERSI 4.0 ...
 // (render, setup, handleCreate, handleChange, handleDelete, helpers)
 function renderSchoolsTable() {
     const tableBody = document.getElementById('schoolsTableBody');
@@ -211,4 +246,4 @@ function showStatusMessage(message, type = 'info', duration = 5000) {
 // ====================================================================
 // ENTRY POINT
 // ====================================================================
-document.addEventListener('DOMContentLoaded', initializeAdminPage);
+document.addEventListener('DOMContentLoaded', tryInitialLoad);
