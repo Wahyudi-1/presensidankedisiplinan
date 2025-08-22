@@ -2,15 +2,14 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 1.2 - Added Change School Link Feature
+ * @version 1.3 - Definitive Fix for Metadata Update
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
- * - Bergantung pada RLS bypass dan fungsi database (PostgreSQL Functions)
- *   yang telah dibuat di backend.
- * - [FITUR v1.2] Menambahkan fungsi handleChangeUserSchool untuk
- *   mengubah tautan sekolah pengguna yang sudah ada.
+ * - [FIX v1.3] Mengubah total logika `handleChangeUserSchool` untuk memindahkan
+ *   proses penggabungan JSON ke frontend, menghindari error 'Invalid input syntax'
+ *   di PostgreSQL secara definitif.
  */
 
 // ====================================================================
@@ -41,7 +40,7 @@ async function checkSuperAdminAccess() {
     const { data: { session }, error } = await supabase.auth.getSession();
 
     if (!session) {
-        window.location.replace('index.html'); // Jika belum login, ke halaman login
+        window.location.replace('index.html');
         return;
     }
 
@@ -49,11 +48,10 @@ async function checkSuperAdminAccess() {
 
     if (!isSuperAdmin) {
         alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
-        window.location.replace('dashboard.html'); // Jika bukan admin, ke dashboard biasa
+        window.location.replace('dashboard.html');
         return;
     }
 
-    // Jika berhasil lolos, tampilkan info admin dan muat data
     document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
     await loadAdminData();
     setupEventListeners();
@@ -64,10 +62,9 @@ async function checkSuperAdminAccess() {
  */
 async function loadAdminData() {
     showLoading(true);
-    // Promise.all untuk memuat data sekolah dan pengguna secara bersamaan
     const [schoolsResponse, usersResponse] = await Promise.all([
         supabase.from('sekolah').select('*').order('nama_sekolah'),
-        supabase.rpc('admin_get_all_users') // Memanggil fungsi database yang aman
+        supabase.rpc('admin_get_all_users')
     ]);
     showLoading(false);
 
@@ -96,7 +93,7 @@ function renderSchoolsTable() {
                 <button class="btn btn-sm btn-danger" onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah}')">Hapus</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || `<tr><td colspan="2" style="text-align: center;">Belum ada sekolah terdaftar.</td></tr>`;
 }
 
 function renderUsersTable() {
@@ -117,13 +114,13 @@ function renderUsersTable() {
                 </td>
             </tr>
         `;
-    }).join('');
+    }).join('') || `<tr><td colspan="3" style="text-align: center;">Belum ada pengguna terdaftar.</td></tr>`;
 }
 
 function populateSchoolDropdown() {
     const select = document.getElementById('userSchoolLink');
     if (!select) return;
-    select.innerHTML = '<option value="">-- Pilih Sekolah untuk Ditautkan --</option>'; // Opsi default
+    select.innerHTML = '<option value="">-- Pilih Sekolah untuk Ditautkan --</option>';
     AppStateAdmin.schools.forEach(school => {
         const option = document.createElement('option');
         option.value = school.id;
@@ -205,44 +202,70 @@ async function handleDeleteSchool(schoolId, schoolName) {
     await loadAdminData();
 }
 
+/**
+ * [SOLUSI DEFINITIF] Menangani proses untuk mengubah sekolah yang ditautkan ke pengguna.
+ * Logika penggabungan JSON dipindahkan ke frontend untuk menghindari error konversi di database.
+ */
 async function handleChangeUserSchool(userId, userEmail) {
+    // Menampilkan prompt untuk memilih sekolah
     const schoolOptions = AppStateAdmin.schools.map((school, index) => 
         `${index + 1}: ${school.nama_sekolah}`
     ).join('\n');
-
     const promptMessage = `Pilih sekolah baru untuk pengguna:\n${userEmail}\n\n${schoolOptions}\n\nMasukkan nomor pilihan:`;
-    
     const choice = prompt(promptMessage);
-
     if (!choice) return;
-
     const choiceIndex = parseInt(choice, 10) - 1;
-
     if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= AppStateAdmin.schools.length) {
-        alert('Pilihan tidak valid. Harap masukkan nomor yang benar.');
+        alert('Pilihan tidak valid.');
         return;
     }
-
     const selectedSchool = AppStateAdmin.schools[choiceIndex];
-    const newSchoolId = selectedSchool.id;
-
     if (!confirm(`Anda yakin ingin menautkan ${userEmail} ke sekolah "${selectedSchool.nama_sekolah}"?`)) {
         return;
     }
 
     showLoading(true);
-    const { error } = await supabase.rpc('admin_link_user_to_school', {
-        target_user_id: userId,
-        target_school_id: newSchoolId
-    });
-    showLoading(false);
 
-    if (error) {
-        return showStatusMessage(`Gagal mengubah tautan: ${error.message}`, 'error');
+    try {
+        // Langkah 1: Ambil metadata yang ada sebagai teks mentah
+        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', {
+            target_user_id: userId
+        });
+        if (getError) throw getError;
+
+        // Langkah 2: Proses metadata di JavaScript
+        let currentMetaData = {};
+        try {
+            if (currentMetaText) {
+                currentMetaData = JSON.parse(currentMetaText);
+            }
+        } catch (e) {
+            console.warn("Metadata pengguna rusak, akan ditimpa.", e);
+            currentMetaData = {};
+        }
+
+        if (typeof currentMetaData !== 'object' || currentMetaData === null) {
+            currentMetaData = {};
+        }
+
+        // Langkah 3: Modifikasi objek metadata
+        currentMetaData.sekolah_id = selectedSchool.id;
+
+        // Langkah 4: Timpa metadata lama dengan yang baru menggunakan fungsi kedua
+        const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
+            target_user_id: userId,
+            new_metadata: currentMetaData
+        });
+        if (setError) throw setError;
+        
+        showLoading(false);
+        showStatusMessage(`Pengguna ${userEmail} berhasil ditautkan ke ${selectedSchool.nama_sekolah}.`, 'success');
+        await loadAdminData();
+
+    } catch (error) {
+        showLoading(false);
+        showStatusMessage(`Terjadi error: ${error.message}`, 'error');
     }
-
-    showStatusMessage(`Pengguna ${userEmail} berhasil ditautkan ke ${selectedSchool.nama_sekolah}.`, 'success');
-    await loadAdminData();
 }
 
 async function handleDeleteUser(userId, userEmail) {
@@ -250,25 +273,6 @@ async function handleDeleteUser(userId, userEmail) {
         return;
     }
     alert("Fungsionalitas hapus pengguna memerlukan pembuatan fungsi 'admin_delete_user' di SQL Editor untuk keamanan.");
-    // Untuk mengaktifkan, buat fungsi SQL berikut:
-    // CREATE OR REPLACE FUNCTION public.admin_delete_user(user_id UUID)
-    // RETURNS TEXT AS $$
-    // BEGIN
-    //   IF NOT public.is_super_admin() THEN RAISE EXCEPTION 'Akses Ditolak'; END IF;
-    //   DELETE FROM auth.users WHERE id = user_id;
-    //   RETURN 'Pengguna berhasil dihapus';
-    // END;
-    // $$ LANGUAGE plpgsql SECURITY DEFINER;
-    //
-    // Lalu uncomment kode di bawah ini:
-    /*
-    showLoading(true);
-    const { error } = await supabase.rpc('admin_delete_user', { user_id: userId });
-    showLoading(false);
-    if (error) return showStatusMessage(`Gagal menghapus pengguna: ${error.message}`, 'error');
-    showStatusMessage(`Pengguna ${userEmail} berhasil dihapus.`, 'success');
-    await loadAdminData();
-    */
 }
 
 
@@ -279,8 +283,6 @@ function showLoading(isLoading) {
     const loader = document.getElementById('loadingIndicator');
     if (loader) {
         loader.style.display = isLoading ? 'flex' : 'none';
-    } else if (isLoading) {
-        console.log('Loading...');
     }
 }
 
