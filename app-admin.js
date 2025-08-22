@@ -2,21 +2,20 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 2.0 - Switched to pg_net RPC Backend
+ * @version 2.1 - Final RPC Implementation
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
- * - [v2.0] Semua logika admin yang memerlukan hak akses tinggi (seperti
- *   membuat pengguna) kini memanggil fungsi RPC (PostgreSQL) yang
- *   menggunakan pg_net, sepenuhnya menggantikan Edge Functions.
- *   Ini menyelesaikan semua masalah CORS.
+ * - [v2.1] Menggunakan pendekatan RPC (PostgreSQL Function dengan pg_net)
+ *   secara eksklusif untuk semua tugas admin yang memerlukan hak akses tinggi.
+ *   Ini adalah solusi paling stabil yang menghindari masalah CORS dan API permission.
  */
 
 // ====================================================================
 // TAHAP 1: KONFIGURASI GLOBAL DAN STATE
 // ====================================================================
-const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
+const SUPABASE_URL = 'https://qjlyqwuotobnzllelta.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
 const { createClient } = window.supabase;
