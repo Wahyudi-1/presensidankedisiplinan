@@ -1,19 +1,19 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DEFINITIF V2)
+ * SCRIPT PANEL SUPER ADMIN - (SOLUSI RADIKAL & FINAL)
  * =================================================================
- * @version 2.1 - Ultra-Defensive Final Fix
+ * @version 3.0 - Radical Overwrite Strategy
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - Memastikan semua panggilan RPC menggunakan objek `supabase` yang benar.
- * - [ULTRA-DEFENSIVE FIX] Secara eksplisit menggunakan JSON.stringify()
- *   untuk mengirim metadata sebagai TEXT, sesuai dengan fungsi SQL
- *   paling defensif untuk menghindari bug lapisan perantara.
+ * - [RADICAL FIX] Mengubah logika `handleChangeUserSchool` untuk tidak
+ *   lagi membaca metadata lama. Sebagai gantinya, ia akan langsung
+ *   menimpa metadata dengan objek baru yang bersih untuk menghindari
+ *   masalah data korup.
  */
 
 // ====================================================================
-// TAHAP 1: KONFIGURASI GLOBAL
+// KONFIGURASI GLOBAL
 // ====================================================================
 const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
@@ -27,7 +27,7 @@ const AppStateAdmin = {
 };
 
 // ====================================================================
-// TAHAP 2: KEAMANAN & INISIALISASI
+// INISIALISASI
 // ====================================================================
 
 async function checkSuperAdminAccess() {
@@ -92,8 +92,9 @@ function populateSchoolDropdown() {
         select.appendChild(option);
     });
 }
+
 // ====================================================================
-// TAHAP 4: EVENT HANDLERS
+// EVENT HANDLERS
 // ====================================================================
 
 function setupEventListeners() {
@@ -153,24 +154,29 @@ async function handleChangeUserSchool(userId, userEmail) {
     showLoading(true);
 
     try {
-        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', { target_user_id: userId });
-        if (getError) throw getError;
+        // ==================================================================
+        // LOGIKA BARU YANG RADIKAL DAN SEDERHANA
+        // ==================================================================
 
-        let currentMetaData = {};
-        if (currentMetaText) {
-            try {
-                currentMetaData = JSON.parse(currentMetaText);
-            } catch (e) {
-                currentMetaData = {};
-            }
+        // Cari pengguna di state aplikasi untuk memeriksa status super_admin.
+        const user = AppStateAdmin.users.find(u => u.id === userId);
+        const isSuperAdmin = user?.raw_user_meta_data?.is_super_admin === true;
+
+        // Buat objek metadata baru yang 100% bersih dari nol.
+        const newCleanMetaData = {
+            sekolah_id: selectedSchool.id
+        };
+
+        // Jika pengguna adalah super admin, pastikan status itu tidak hilang.
+        if (isSuperAdmin) {
+            newCleanMetaData.is_super_admin = true;
         }
-        
-        const cleanMetaData = { is_super_admin: currentMetaData.is_super_admin };
-        cleanMetaData.sekolah_id = selectedSchool.id;
 
+        // Langsung panggil fungsi SET dengan objek yang bersih.
+        // Kita tidak lagi memanggil 'admin_get_user_metadata'.
         const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: JSON.stringify(cleanMetaData)
+            new_metadata: newCleanMetaData
         });
         
         if (setError) throw setError;
