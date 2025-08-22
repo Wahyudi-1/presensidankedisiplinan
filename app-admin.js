@@ -176,7 +176,7 @@ async function handleCreateUserSubmit(event) {
 
     showLoading(true);
     // Memanggil Edge Function yang aman untuk membuat pengguna
-    const { data, error } = await supabase.functions.invoke('admin-user-manager', {
+    const { data, error } = await supabase.functions.invoke('quick-task', {
         body: {
             action: 'createUser',
             payload: {
