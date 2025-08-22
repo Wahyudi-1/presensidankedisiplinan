@@ -1,25 +1,31 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (PENDEKATAN SOLUSI BARU)
+ * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DIPERBAIKI)
  * =================================================================
- * @version 1.6 - Re-initializing Supabase client to ensure auth headers
+ * @version 1.7 - Fixed Supabase client initialization error
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - Mengubah nama panggilan Edge Function menjadi 'quick-task'.
- * - [FIX] Memastikan objek metadata bersih sebelum dikirim.
- * - [NEW FIX] Menambahkan inisialisasi ulang klien Supabase untuk setiap
- *   panggilan RPC administratif untuk mengatasi masalah 'No API key found'.
+ * - [FIX] Memperbaiki "ReferenceError: Cannot access 'supabase' before initialization"
+ *   dengan menggunakan metode inisialisasi klien Supabase yang benar.
+ * - Semua perbaikan sebelumnya tetap dipertahankan.
  */
 
 // ====================================================================
 // TAHAP 1: KONFIGURASI GLOBAL
 // ====================================================================
 const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
-// Inisialisasi klien Supabase utama
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// =======================================================================
+// PERBAIKAN UTAMA DI SINI
+// =======================================================================
+// Inisialisasi klien Supabase menggunakan library global yang sudah dimuat oleh HTML.
+const { createClient } = window.supabase;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// =======================================================================
+// AKHIR DARI PERBAIKAN
+// =======================================================================
 
 // State Aplikasi
 const AppStateAdmin = {
@@ -28,30 +34,7 @@ const AppStateAdmin = {
 };
 
 // ====================================================================
-// TAHAP 2: FUNGSI PEMBANTU UTAMA
-// ====================================================================
-
-// Fungsi ini akan membuat instance Supabase baru dengan token otentikasi saat ini.
-// Ini adalah kunci untuk mengatasi masalah "No API key found".
-function createAuthenticatedSupabaseClient() {
-    const session = supabase.auth.session();
-    if (!session) {
-        // Jika tidak ada sesi, gunakan kunci anonim dasar.
-        return supabase;
-    }
-    // Buat klien baru dengan header Authorization yang disetel secara eksplisit.
-    return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: {
-            headers: {
-                Authorization: `Bearer ${session.access_token}`
-            }
-        }
-    });
-}
-
-
-// ====================================================================
-// TAHAP 3: KEAMANAN & INISIALISASI
+// TAHAP 2: KEAMANAN & INISIALISASI
 // ====================================================================
 
 async function checkSuperAdminAccess() {
@@ -72,11 +55,9 @@ async function checkSuperAdminAccess() {
 
 async function loadAdminData() {
     showLoading(true);
-    // Gunakan klien yang diautentikasi untuk panggilan RPC
-    const authenticatedSupabase = createAuthenticatedSupabaseClient();
     const [schoolsResponse, usersResponse] = await Promise.all([
-        authenticatedSupabase.from('sekolah').select('*').order('nama_sekolah'),
-        authenticatedSupabase.rpc('admin_get_all_users')
+        supabase.from('sekolah').select('*').order('nama_sekolah'),
+        supabase.rpc('admin_get_all_users')
     ]);
     showLoading(false);
 
@@ -146,6 +127,22 @@ function setupEventListeners() {
     });
 }
 
+async function handleCreateSchoolSubmit(event) {
+    event.preventDefault();
+    const schoolName = document.getElementById('schoolNameInput').value;
+    if (!schoolName) return;
+
+    showLoading(true);
+    const { error } = await supabase.from('sekolah').insert({ nama_sekolah: schoolName });
+    showLoading(false);
+
+    if (error) return showStatusMessage(`Gagal membuat sekolah: ${error.message}`, 'error');
+    
+    showStatusMessage(`Sekolah "${schoolName}" berhasil dibuat.`, 'success');
+    event.target.reset();
+    await loadAdminData();
+}
+
 async function handleCreateUserSubmit(event) {
     event.preventDefault();
     const email = document.getElementById('userEmail').value;
@@ -160,9 +157,7 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-    // Gunakan klien yang diautentikasi
-    const authenticatedSupabase = createAuthenticatedSupabaseClient();
-    const { data, error } = await authenticatedSupabase.functions.invoke('quick-task', {
+    const { data, error } = await supabase.functions.invoke('quick-task', {
         body: {
             action: 'createUser',
             payload: { email, password, schoolId }
@@ -198,10 +193,7 @@ async function handleChangeUserSchool(userId, userEmail) {
     showLoading(true);
 
     try {
-        // Gunakan klien yang diautentikasi untuk semua panggilan
-        const authenticatedSupabase = createAuthenticatedSupabaseClient();
-        
-        const { data: currentMetaText, error: getError } = await authenticatedSupabase.rpc('admin_get_user_metadata', { target_user_id: userId });
+        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', { target_user_id: userId });
         if (getError) throw getError;
 
         let currentMetaData = {};
@@ -218,11 +210,9 @@ async function handleChangeUserSchool(userId, userEmail) {
         };
         cleanMetaData.sekolah_id = selectedSchool.id;
 
-        // Kirim objek yang sudah bersih
-        // PENTING: Supabase JS akan otomatis mengubah objek JS menjadi string JSON
-        const { error: setError } = await authenticatedSupabase.rpc('admin_set_user_metadata', {
+        const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: JSON.stringify(cleanMetaData) // [FIX KRUSIAL] Kirim sebagai string secara eksplisit
+            new_metadata: JSON.stringify(cleanMetaData)
         });
         
         if (setError) throw setError;
@@ -242,8 +232,7 @@ async function handleDeleteSchool(schoolId, schoolName) {
         return;
     }
     showLoading(true);
-    const authenticatedSupabase = createAuthenticatedSupabaseClient();
-    const { error } = await authenticatedSupabase.from('sekolah').delete().eq('id', schoolId);
+    const { error } = await supabase.from('sekolah').delete().eq('id', schoolId);
     showLoading(false);
 
     if (error) return showStatusMessage(`Gagal menghapus sekolah: ${error.message}`, 'error');
