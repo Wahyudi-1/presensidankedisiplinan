@@ -1,15 +1,15 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR (DENGAN PERBAIKAN)
+ * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR (SOLUSI FINAL)
  * =================================================================
- * @version 1.4 - Fixed Edge Function name mismatch
+ * @version 1.5 - Final Fix for Metadata Handling
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - [FIX] Mengubah nama panggilan Edge Function dari 'admin-user-manager'
- *   menjadi 'quick-task' agar sesuai dengan nama fungsi yang sebenarnya
- *   ter-deploy di Supabase.
- * - [PREVENTIVE FIX] Menambahkan parsing JSON yang aman di handleChangeUserSchool.
+ * - Mengubah nama panggilan Edge Function menjadi 'quick-task'.
+ * - [FIX] Memastikan objek metadata yang dikirim saat mengubah sekolah
+ *   hanya berisi field yang relevan (sekolah_id) dan membersihkan
+ *   field lain yang tidak sengaja terbawa, seperti 'email_verified'.
  */
 
 // ====================================================================
@@ -21,7 +21,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const { createClient } = window.supabase;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// State untuk menyimpan data yang dimuat
 const AppStateAdmin = {
     schools: [],
     users: []
@@ -32,16 +31,14 @@ const AppStateAdmin = {
 // ====================================================================
 
 async function checkSuperAdminAccess() {
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
         window.location.replace('index.html');
         return;
     }
 
-    const isSuperAdmin = session.user.user_metadata?.is_super_admin === true;
-
-    if (!isSuperAdmin) {
+    if (session.user.user_metadata?.is_super_admin !== true) {
         alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
         window.location.replace('dashboard.html');
         return;
@@ -72,7 +69,7 @@ async function loadAdminData() {
 }
 
 // ====================================================================
-// TAHAP 3: FUNGSI RENDER (MENAMPILKAN DATA KE HTML)
+// TAHAP 3: FUNGSI RENDER
 // ====================================================================
 
 function renderSchoolsTable() {
@@ -81,9 +78,7 @@ function renderSchoolsTable() {
     tableBody.innerHTML = AppStateAdmin.schools.map(school => `
         <tr>
             <td>${school.nama_sekolah}</td>
-            <td>
-                <button class="btn btn-sm btn-danger" onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah}')">Hapus</button>
-            </td>
+            <td><button class="btn btn-sm btn-danger" onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah}')">Hapus</button></td>
         </tr>
     `).join('') || `<tr><td colspan="2" style="text-align: center;">Belum ada sekolah terdaftar.</td></tr>`;
 }
@@ -122,7 +117,7 @@ function populateSchoolDropdown() {
 }
 
 // ====================================================================
-// TAHAP 4: EVENT HANDLERS (AKSI PENGGUNA)
+// TAHAP 4: EVENT HANDLERS
 // ====================================================================
 
 function setupEventListeners() {
@@ -165,41 +160,26 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-
-    // =======================================================================
-    // PERUBAHAN UTAMA DI SINI: Mengganti 'admin-user-manager' menjadi 'quick-task'
-    // =======================================================================
     const { data, error } = await supabase.functions.invoke('quick-task', {
         body: {
             action: 'createUser',
-            payload: {
-                email: email,
-                password: password,
-                schoolId: schoolId
-            }
+            payload: { email, password, schoolId }
         }
     });
-    // =======================================================================
-    // AKHIR DARI PERUBAHAN
-    // =======================================================================
-    
     showLoading(false);
 
-    // Penanganan error yang lebih spesifik dari Edge Function
     if (error) {
-         // Coba untuk mem-parsing error dari body respons jika ada
         const errorMessage = data?.error || error.message;
         return showStatusMessage(`Gagal membuat pengguna: ${errorMessage}`, 'error');
     }
     
-    const userEmail = data.user ? data.user.email : email;
-    showStatusMessage(`Pengguna ${userEmail} berhasil dibuat dan ditautkan.`, 'success');
+    showStatusMessage(`Pengguna ${email} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
     await loadAdminData();
 }
 
 async function handleDeleteSchool(schoolId, schoolName) {
-    if (!confirm(`PERINGATAN:\nAnda akan menghapus sekolah "${schoolName}".\n\nSEMUA DATA SISWA, PRESENSI, DAN DISIPLIN yang terkait dengan sekolah ini akan HILANG PERMANEN.\n\nLanjutkan?`)) {
+    if (!confirm(`PERINGATAN:\nMenghapus sekolah "${schoolName}" akan menghapus SEMUA data terkait (siswa, presensi, disiplin) secara permanen.\n\nLanjutkan?`)) {
         return;
     }
     showLoading(true);
@@ -213,17 +193,15 @@ async function handleDeleteSchool(schoolId, schoolName) {
 }
 
 async function handleChangeUserSchool(userId, userEmail) {
-    const schoolOptions = AppStateAdmin.schools.map((school, index) => 
-        `${index + 1}: ${school.nama_sekolah}`
-    ).join('\n');
-    const promptMessage = `Pilih sekolah baru untuk pengguna:\n${userEmail}\n\n${schoolOptions}\n\nMasukkan nomor pilihan:`;
-    const choice = prompt(promptMessage);
+    const schoolOptions = AppStateAdmin.schools.map((school, index) => `${index + 1}: ${school.nama_sekolah}`).join('\n');
+    const choice = prompt(`Pilih sekolah baru untuk ${userEmail}:\n\n${schoolOptions}\n\nMasukkan nomor pilihan:`);
     if (!choice) return;
+    
     const choiceIndex = parseInt(choice, 10) - 1;
-    if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= AppStateAdmin.schools.length) {
-        alert('Pilihan tidak valid.');
-        return;
+    if (isNaN(choiceIndex) || !AppStateAdmin.schools[choiceIndex]) {
+        return alert('Pilihan tidak valid.');
     }
+    
     const selectedSchool = AppStateAdmin.schools[choiceIndex];
     if (!confirm(`Anda yakin ingin menautkan ${userEmail} ke sekolah "${selectedSchool.nama_sekolah}"?`)) {
         return;
@@ -240,21 +218,29 @@ async function handleChangeUserSchool(userId, userEmail) {
             try {
                 currentMetaData = JSON.parse(currentMetaText);
             } catch (e) {
-                console.warn("Gagal mem-parsing metadata, akan ditimpa.", e);
                 currentMetaData = {};
             }
         }
+        
+        // ==================================================================
+        // SOLUSI FINAL DI SINI
+        // ==================================================================
+        // Buat objek metadata BARU yang bersih.
+        // Salin field 'is_super_admin' jika ada, karena kita tidak mau menghapusnya.
+        const cleanMetaData = {
+            is_super_admin: currentMetaData.is_super_admin
+        };
+        
+        // Timpa atau tambahkan sekolah_id dengan yang baru.
+        cleanMetaData.sekolah_id = selectedSchool.id;
 
-        if (typeof currentMetaData !== 'object' || currentMetaData === null) {
-            currentMetaData = {};
-        }
-
-        currentMetaData.sekolah_id = selectedSchool.id;
-
+        // Kirim objek yang sudah bersih ke server.
         const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: currentMetaData
+            new_metadata: cleanMetaData 
         });
+        // ==================================================================
+        
         if (setError) throw setError;
         
         showLoading(false);
@@ -268,36 +254,27 @@ async function handleChangeUserSchool(userId, userEmail) {
 }
 
 async function handleDeleteUser(userId, userEmail) {
-    if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) {
-        return;
-    }
-    alert("Fungsionalitas hapus pengguna memerlukan pembuatan Edge Function atau fungsi SQL 'admin_delete_user' untuk keamanan.");
+    if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) return;
+    alert("Fungsionalitas hapus pengguna belum diimplementasikan di Edge Function.");
 }
-
 
 // ====================================================================
 // TAHAP 5: FUNGSI PEMBANTU
 // ====================================================================
 function showLoading(isLoading) {
-    const loader = document.getElementById('loadingIndicator');
-    if (loader) {
-        loader.style.display = isLoading ? 'flex' : 'none';
-    }
+    document.getElementById('loadingIndicator').style.display = isLoading ? 'flex' : 'none';
 }
 
 function showStatusMessage(message, type = 'info', duration = 5000) {
     const statusEl = document.getElementById('statusMessage');
-    if (!statusEl) {
-        alert(`${type.toUpperCase()}: ${message}`);
-        return;
-    }
+    if (!statusEl) return alert(`${type.toUpperCase()}: ${message}`);
+    
     statusEl.textContent = message;
     statusEl.className = `status-message ${type}`;
     statusEl.style.display = 'block';
     window.scrollTo(0, 0);
     setTimeout(() => { statusEl.style.display = 'none'; }, duration);
 }
-
 
 // ====================================================================
 // TAHAP 6: ENTRY POINT
