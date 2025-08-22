@@ -2,15 +2,15 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 1.1 - Fixed Admin API Call
+ * @version 1.2 - Added Change School Link Feature
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
  * - Bergantung pada RLS bypass dan fungsi database (PostgreSQL Functions)
  *   yang telah dibuat di backend.
- * - [FIX v1.1] Mengubah panggilan `supabase.auth.admin.listUsers()` menjadi
- *   `supabase.rpc('admin_get_all_users')` untuk menghindari error 401.
+ * - [FITUR v1.2] Menambahkan fungsi handleChangeUserSchool untuk
+ *   mengubah tautan sekolah pengguna yang sudah ada.
  */
 
 // ====================================================================
@@ -67,7 +67,7 @@ async function loadAdminData() {
     // Promise.all untuk memuat data sekolah dan pengguna secara bersamaan
     const [schoolsResponse, usersResponse] = await Promise.all([
         supabase.from('sekolah').select('*').order('nama_sekolah'),
-        supabase.rpc('admin_get_all_users') // [FIX] Memanggil fungsi database yang aman
+        supabase.rpc('admin_get_all_users') // Memanggil fungsi database yang aman
     ]);
     showLoading(false);
 
@@ -75,7 +75,7 @@ async function loadAdminData() {
     if (usersResponse.error) return showStatusMessage(`Gagal memuat pengguna: ${usersResponse.error.message}`, 'error');
     
     AppStateAdmin.schools = schoolsResponse.data;
-    AppStateAdmin.users = usersResponse.data; // [FIX] Data pengguna langsung dari response
+    AppStateAdmin.users = usersResponse.data;
 
     renderSchoolsTable();
     renderUsersTable();
@@ -104,7 +104,6 @@ function renderUsersTable() {
     if (!tableBody) return;
     tableBody.innerHTML = AppStateAdmin.users.map(user => {
         const schoolId = user.raw_user_meta_data?.sekolah_id;
-        // Cari nama sekolah berdasarkan ID yang ada di metadata pengguna
         const linkedSchool = AppStateAdmin.schools.find(s => s.id === schoolId);
         const schoolName = linkedSchool ? linkedSchool.nama_sekolah : '<span style="color: #e74c3c;">Belum Tertaut</span>';
         
@@ -113,6 +112,7 @@ function renderUsersTable() {
                 <td>${user.email}</td>
                 <td>${schoolName}</td>
                 <td>
+                    <button class="btn btn-sm btn-secondary" onclick="handleChangeUserSchool('${user.id}', '${user.email}')">Ubah</button>
                     <button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>
                 </td>
             </tr>
@@ -159,7 +159,7 @@ async function handleCreateSchoolSubmit(event) {
     
     showStatusMessage(`Sekolah "${schoolName}" berhasil dibuat.`, 'success');
     event.target.reset();
-    await loadAdminData(); // Muat ulang semua data
+    await loadAdminData();
 }
 
 async function handleCreateUserSubmit(event) {
@@ -177,7 +177,6 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-    // Memanggil fungsi PostgreSQL yang aman dari frontend
     const { data, error } = await supabase.rpc('admin_create_user_for_school', {
         user_email: email,
         user_password: password,
@@ -189,7 +188,7 @@ async function handleCreateUserSubmit(event) {
 
     showStatusMessage(`Pengguna ${data.email} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
-    await loadAdminData(); // Muat ulang semua data
+    await loadAdminData();
 }
 
 async function handleDeleteSchool(schoolId, schoolName) {
@@ -203,6 +202,46 @@ async function handleDeleteSchool(schoolId, schoolName) {
     if (error) return showStatusMessage(`Gagal menghapus sekolah: ${error.message}`, 'error');
     
     showStatusMessage(`Sekolah "${schoolName}" berhasil dihapus.`, 'success');
+    await loadAdminData();
+}
+
+async function handleChangeUserSchool(userId, userEmail) {
+    const schoolOptions = AppStateAdmin.schools.map((school, index) => 
+        `${index + 1}: ${school.nama_sekolah}`
+    ).join('\n');
+
+    const promptMessage = `Pilih sekolah baru untuk pengguna:\n${userEmail}\n\n${schoolOptions}\n\nMasukkan nomor pilihan:`;
+    
+    const choice = prompt(promptMessage);
+
+    if (!choice) return;
+
+    const choiceIndex = parseInt(choice, 10) - 1;
+
+    if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= AppStateAdmin.schools.length) {
+        alert('Pilihan tidak valid. Harap masukkan nomor yang benar.');
+        return;
+    }
+
+    const selectedSchool = AppStateAdmin.schools[choiceIndex];
+    const newSchoolId = selectedSchool.id;
+
+    if (!confirm(`Anda yakin ingin menautkan ${userEmail} ke sekolah "${selectedSchool.nama_sekolah}"?`)) {
+        return;
+    }
+
+    showLoading(true);
+    const { error } = await supabase.rpc('admin_link_user_to_school', {
+        target_user_id: userId,
+        target_school_id: newSchoolId
+    });
+    showLoading(false);
+
+    if (error) {
+        return showStatusMessage(`Gagal mengubah tautan: ${error.message}`, 'error');
+    }
+
+    showStatusMessage(`Pengguna ${userEmail} berhasil ditautkan ke ${selectedSchool.nama_sekolah}.`, 'success');
     await loadAdminData();
 }
 
