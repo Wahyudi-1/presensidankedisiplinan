@@ -1,17 +1,15 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
+ * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR (DENGAN PERBAIKAN)
  * =================================================================
- * @version 1.3 - Final Version
+ * @version 1.4 - Fixed Edge Function name mismatch
  * @author Gemini AI Expert for User
  *
- * Catatan:
- * - File ini HANYA untuk halaman superadmin.html.
- * - Bergantung pada RLS bypass di backend.
- * - Menggunakan Supabase Edge Functions untuk tugas-tugas administratif
- *   yang memerlukan hak akses tinggi (seperti membuat pengguna).
- * - Menggunakan fungsi RPC (PostgreSQL) untuk tugas-tugas yang aman
- *   dilakukan di database (seperti mengubah metadata).
+ * Catatan Perbaikan:
+ * - [FIX] Mengubah nama panggilan Edge Function dari 'admin-user-manager'
+ *   menjadi 'quick-task' agar sesuai dengan nama fungsi yang sebenarnya
+ *   ter-deploy di Supabase.
+ * - [PREVENTIVE FIX] Menambahkan parsing JSON yang aman di handleChangeUserSchool.
  */
 
 // ====================================================================
@@ -33,11 +31,6 @@ const AppStateAdmin = {
 // TAHAP 2: KEAMANAN & INISIALISASI
 // ====================================================================
 
-/**
- * Fungsi ini adalah gerbang keamanan. Ia memeriksa apakah pengguna yang
- * mengakses halaman ini adalah Super Admin. Jika tidak, akan langsung
- * dialihkan.
- */
 async function checkSuperAdminAccess() {
     const { data: { session }, error } = await supabase.auth.getSession();
 
@@ -59,9 +52,6 @@ async function checkSuperAdminAccess() {
     setupEventListeners();
 }
 
-/**
- * Memuat semua data awal yang diperlukan untuk panel admin.
- */
 async function loadAdminData() {
     showLoading(true);
     const [schoolsResponse, usersResponse] = await Promise.all([
@@ -175,7 +165,10 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-    // Memanggil Edge Function yang aman untuk membuat pengguna
+
+    // =======================================================================
+    // PERUBAHAN UTAMA DI SINI: Mengganti 'admin-user-manager' menjadi 'quick-task'
+    // =======================================================================
     const { data, error } = await supabase.functions.invoke('quick-task', {
         body: {
             action: 'createUser',
@@ -186,11 +179,19 @@ async function handleCreateUserSubmit(event) {
             }
         }
     });
+    // =======================================================================
+    // AKHIR DARI PERUBAHAN
+    // =======================================================================
+    
     showLoading(false);
 
-    if (error) return showStatusMessage(`Gagal membuat pengguna: ${error.message}`, 'error');
+    // Penanganan error yang lebih spesifik dari Edge Function
+    if (error) {
+         // Coba untuk mem-parsing error dari body respons jika ada
+        const errorMessage = data?.error || error.message;
+        return showStatusMessage(`Gagal membuat pengguna: ${errorMessage}`, 'error');
+    }
     
-    // Response dari Edge Function mungkin memiliki struktur yang berbeda, sesuaikan jika perlu
     const userEmail = data.user ? data.user.email : email;
     showStatusMessage(`Pengguna ${userEmail} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
@@ -235,11 +236,13 @@ async function handleChangeUserSchool(userId, userEmail) {
         if (getError) throw getError;
 
         let currentMetaData = {};
-        try {
-            if (currentMetaText) { currentMetaData = JSON.parse(currentMetaText); }
-        } catch (e) {
-            console.warn("Metadata pengguna rusak, akan ditimpa.", e);
-            currentMetaData = {};
+        if (currentMetaText) {
+            try {
+                currentMetaData = JSON.parse(currentMetaText);
+            } catch (e) {
+                console.warn("Gagal mem-parsing metadata, akan ditimpa.", e);
+                currentMetaData = {};
+            }
         }
 
         if (typeof currentMetaData !== 'object' || currentMetaData === null) {
