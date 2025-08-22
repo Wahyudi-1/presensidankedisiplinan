@@ -1,37 +1,48 @@
 // File: auth.js
 // Tujuan: Menangani semua logika yang berkaitan dengan autentikasi,
 //         termasuk login, logout, lupa password, dan manajemen sesi.
+// Versi: Diperbaiki dan Disempurnakan
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
 
 /**
  * Memeriksa sesi pengguna saat ini dan mengarahkan mereka ke halaman yang sesuai.
- * Mencegah pengguna yang belum login mengakses dashboard, dan sebaliknya.
+ * Mencegah pengguna yang belum login mengakses area terproteksi, dan sebaliknya.
+ * Mengarahkan pengguna ke panel yang benar berdasarkan perannya (Super Admin vs. Pengguna Biasa).
  */
 async function checkAuthenticationAndSetup() {
     const isPasswordRecovery = window.location.hash.includes('type=recovery');
     const { data: { session } } = await supabase.auth.getSession();
-    
-    // Jika tidak ada sesi dan pengguna mencoba mengakses dashboard, kembalikan ke login.
-    if (!session && window.location.pathname.includes('dashboard.html')) {
-        window.location.href = 'index.html';
+    const currentPath = window.location.pathname;
+
+    // Jika tidak ada sesi dan pengguna mencoba mengakses halaman terproteksi, kembalikan ke login.
+    if (!session && (currentPath.includes('dashboard.html') || currentPath.includes('superadmin.html'))) {
+        window.location.replace('index.html');
         return;
     }
 
     // Jika ada sesi dan pengguna berada di halaman login (dan bukan dalam proses recovery password),
     // arahkan ke halaman yang benar berdasarkan perannya.
-    if (session && (window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/presensidankedisiplinan/')) && !isPasswordRecovery) {
-        const isSuperAdmin = session.user.user_metadata?.is_super_admin === true;
-        if (isSuperAdmin) {
-            window.location.href = 'superadmin.html';
+    if (session && (currentPath.includes('index.html') || currentPath.endsWith('/')) && !isPasswordRecovery) {
+        // Cek RLS-level role dari tabel 'pengguna' untuk keamanan tambahan
+        const { data: userProfile } = await supabase
+            .from('pengguna')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+        const userRole = userProfile?.role?.trim().toLowerCase();
+
+        if (userRole === 'super_admin') {
+            window.location.replace('superadmin.html');
         } else {
-            window.location.href = 'dashboard.html';
+            window.location.replace('dashboard.html');
         }
         return;
     }
 
-    // Jika ada sesi, tampilkan pesan selamat datang.
+    // Jika ada sesi, tampilkan pesan selamat datang di halaman manapun.
     if (session) {
         const welcomeEl = document.getElementById('welcomeMessage');
         if (welcomeEl) {
@@ -73,9 +84,9 @@ function setupAuthListener() {
                 showStatusMessage('Password berhasil diperbarui! Silakan login dengan password baru Anda.', 'success');
 
                 setTimeout(() => {
-                    window.location.hash = ''; // Hapus hash dari URL
-                    resetContainer.style.display = 'none';
-                    loginBox.style.display = 'grid';
+                    // Penyempurnaan: Hapus hash dari URL setelah berhasil
+                    window.location.hash = ''; 
+                    window.location.reload(); // Muat ulang halaman untuk kembali ke state login
                 }, 3000);
             };
         }
@@ -84,6 +95,7 @@ function setupAuthListener() {
 
 /**
  * Menangani proses login saat form di halaman login disubmit.
+ * Fungsi ini tidak di-export karena dipanggil oleh event listener internal.
  */
 async function handleLogin() {
     const usernameEl = document.getElementById('username');
@@ -103,17 +115,13 @@ async function handleLogin() {
         return showStatusMessage(`Login Gagal: ${error.message}`, 'error');
     }
 
-    // Setelah login berhasil, periksa peran dan arahkan
-    const isSuperAdmin = data.user.user_metadata?.is_super_admin === true;
-    if (isSuperAdmin) {
-        window.location.href = 'superadmin.html';
-    } else {
-        window.location.href = 'dashboard.html';
-    }
+    // Setelah login berhasil, panggil kembali checkAuthenticationAndSetup untuk pengalihan
+    // yang benar berdasarkan peran. Ini lebih andal.
+    await checkAuthenticationAndSetup();
 }
 
 /**
- * Menangani proses logout.
+ * Menangani proses logout. Di-export agar bisa dipanggil dari modul lain (dashboard/admin).
  */
 export async function handleLogout() {
     if (confirm('Apakah Anda yakin ingin logout?')) {
@@ -123,13 +131,14 @@ export async function handleLogout() {
         if (error) {
             alert('Gagal logout: ' + error.message);
         } else {
-            window.location.href = 'index.html';
+            window.location.replace('index.html');
         }
     }
 }
 
 /**
  * Menangani permintaan reset password.
+ * Fungsi ini tidak di-export karena dipanggil oleh event listener internal.
  */
 async function handleForgotPassword() {
     const emailEl = document.getElementById('username');
@@ -143,9 +152,9 @@ async function handleForgotPassword() {
     }
 
     showLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + window.location.pathname,
-    });
+    // Menggunakan URL dasar tanpa hash untuk link reset
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     showLoading(false);
 
     if (error) {
@@ -155,12 +164,13 @@ async function handleForgotPassword() {
 }
 
 /**
- * Inisialisasi semua fungsi dan event listener yang diperlukan untuk halaman login.
+ * Inisialisasi semua fungsi dan event listener yang diperlukan untuk Halaman Login.
+ * Di-export untuk dipanggil oleh main.js
  */
 export async function initLoginPage() {
     setupPasswordToggle();
     
-    // Cek apakah URL berisi hash untuk recovery password
+    // Secara proaktif cek apakah URL berisi hash untuk recovery password saat halaman dimuat
     if (window.location.hash.includes('type=recovery')) {
         const loginBox = document.querySelector('.login-box');
         const resetContainer = document.getElementById('resetPasswordContainer');
@@ -173,20 +183,20 @@ export async function initLoginPage() {
     setupAuthListener();
     await checkAuthenticationAndSetup();
     
-    // Lampirkan event listener secara eksplisit ke elemen form
+    // ====================== PERBAIKAN UTAMA DI SINI ======================
+    // Secara programatik, cari form login dan lampirkan event listener 'submit'.
+    // Ini menggantikan kebutuhan `onsubmit` di HTML dan menyelesaikan masalah scope.
     const loginForm = document.querySelector('.login-form-container form');
     if(loginForm) {
         loginForm.addEventListener('submit', (event) => {
-            event.preventDefault();
-            handleLogin();
+            event.preventDefault(); // Mencegah form mengirim data secara tradisional
+            handleLogin(); // Memanggil fungsi login dari dalam modul
         });
     }
 
+    // Lampirkan event listener untuk link "Lupa Password?"
     document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
         e.preventDefault();
         handleForgotPassword();
     });
 }
-
-// Ekspor fungsi yang mungkin dibutuhkan oleh modul lain (seperti dashboard.js)
-export { checkAuthenticationAndSetup, setupAuthListener };
