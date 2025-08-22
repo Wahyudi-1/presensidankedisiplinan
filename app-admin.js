@@ -2,14 +2,16 @@
  * =================================================================
  * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR
  * =================================================================
- * @version 1.3 - Definitive Fix for Metadata Update
+ * @version 1.3 - Final Version
  * @author Gemini AI Expert for User
  *
  * Catatan:
  * - File ini HANYA untuk halaman superadmin.html.
- * - [FIX v1.3] Mengubah total logika `handleChangeUserSchool` untuk memindahkan
- *   proses penggabungan JSON ke frontend, menghindari error 'Invalid input syntax'
- *   di PostgreSQL secara definitif.
+ * - Bergantung pada RLS bypass di backend.
+ * - Menggunakan Supabase Edge Functions untuk tugas-tugas administratif
+ *   yang memerlukan hak akses tinggi (seperti membuat pengguna).
+ * - Menggunakan fungsi RPC (PostgreSQL) untuk tugas-tugas yang aman
+ *   dilakukan di database (seperti mengubah metadata).
  */
 
 // ====================================================================
@@ -168,22 +170,29 @@ async function handleCreateUserSubmit(event) {
     if (!email || !password || !schoolId) {
         return showStatusMessage('Harap isi semua field: Email, Password, dan Sekolah.', 'error');
     }
-
     if (password.length < 6) {
         return showStatusMessage('Password minimal 6 karakter.', 'error');
     }
 
     showLoading(true);
-    const { data, error } = await supabase.rpc('admin_create_user_for_school', {
-        user_email: email,
-        user_password: password,
-        target_school_id: schoolId
+    // Memanggil Edge Function yang aman untuk membuat pengguna
+    const { data, error } = await supabase.functions.invoke('admin-user-manager', {
+        body: {
+            action: 'createUser',
+            payload: {
+                email: email,
+                password: password,
+                schoolId: schoolId
+            }
+        }
     });
     showLoading(false);
 
     if (error) return showStatusMessage(`Gagal membuat pengguna: ${error.message}`, 'error');
-
-    showStatusMessage(`Pengguna ${data.email} berhasil dibuat dan ditautkan.`, 'success');
+    
+    // Response dari Edge Function mungkin memiliki struktur yang berbeda, sesuaikan jika perlu
+    const userEmail = data.user ? data.user.email : email;
+    showStatusMessage(`Pengguna ${userEmail} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
     await loadAdminData();
 }
@@ -202,12 +211,7 @@ async function handleDeleteSchool(schoolId, schoolName) {
     await loadAdminData();
 }
 
-/**
- * [SOLUSI DEFINITIF] Menangani proses untuk mengubah sekolah yang ditautkan ke pengguna.
- * Logika penggabungan JSON dipindahkan ke frontend untuk menghindari error konversi di database.
- */
 async function handleChangeUserSchool(userId, userEmail) {
-    // Menampilkan prompt untuk memilih sekolah
     const schoolOptions = AppStateAdmin.schools.map((school, index) => 
         `${index + 1}: ${school.nama_sekolah}`
     ).join('\n');
@@ -227,18 +231,12 @@ async function handleChangeUserSchool(userId, userEmail) {
     showLoading(true);
 
     try {
-        // Langkah 1: Ambil metadata yang ada sebagai teks mentah
-        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', {
-            target_user_id: userId
-        });
+        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', { target_user_id: userId });
         if (getError) throw getError;
 
-        // Langkah 2: Proses metadata di JavaScript
         let currentMetaData = {};
         try {
-            if (currentMetaText) {
-                currentMetaData = JSON.parse(currentMetaText);
-            }
+            if (currentMetaText) { currentMetaData = JSON.parse(currentMetaText); }
         } catch (e) {
             console.warn("Metadata pengguna rusak, akan ditimpa.", e);
             currentMetaData = {};
@@ -248,10 +246,8 @@ async function handleChangeUserSchool(userId, userEmail) {
             currentMetaData = {};
         }
 
-        // Langkah 3: Modifikasi objek metadata
         currentMetaData.sekolah_id = selectedSchool.id;
 
-        // Langkah 4: Timpa metadata lama dengan yang baru menggunakan fungsi kedua
         const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
             new_metadata: currentMetaData
@@ -272,7 +268,7 @@ async function handleDeleteUser(userId, userEmail) {
     if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) {
         return;
     }
-    alert("Fungsionalitas hapus pengguna memerlukan pembuatan fungsi 'admin_delete_user' di SQL Editor untuk keamanan.");
+    alert("Fungsionalitas hapus pengguna memerlukan pembuatan Edge Function atau fungsi SQL 'admin_delete_user' untuk keamanan.");
 }
 
 
