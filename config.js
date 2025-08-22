@@ -1,4 +1,4 @@
-// File: config.js
+// File: config.js 
 // Tujuan: Konfigurasi dan inisialisasi koneksi ke Supabase.
 // Ini adalah satu-satunya tempat di mana URL dan kunci API Anda ditulis.
 
