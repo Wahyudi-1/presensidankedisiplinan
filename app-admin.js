@@ -1,49 +1,70 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - SISTEM PRESENSI QR (SOLUSI FINAL)
+ * SCRIPT PANEL SUPER ADMIN - (PENDEKATAN SOLUSI BARU)
  * =================================================================
- * @version 1.5 - Final Fix for Metadata Handling
+ * @version 1.6 - Re-initializing Supabase client to ensure auth headers
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
  * - Mengubah nama panggilan Edge Function menjadi 'quick-task'.
- * - [FIX] Memastikan objek metadata yang dikirim saat mengubah sekolah
- *   hanya berisi field yang relevan (sekolah_id) dan membersihkan
- *   field lain yang tidak sengaja terbawa, seperti 'email_verified'.
+ * - [FIX] Memastikan objek metadata bersih sebelum dikirim.
+ * - [NEW FIX] Menambahkan inisialisasi ulang klien Supabase untuk setiap
+ *   panggilan RPC administratif untuk mengatasi masalah 'No API key found'.
  */
 
 // ====================================================================
-// TAHAP 1: KONFIGURASI GLOBAL DAN STATE
+// TAHAP 1: KONFIGURASI GLOBAL
 // ====================================================================
 const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
-const { createClient } = window.supabase;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Inisialisasi klien Supabase utama
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// State Aplikasi
 const AppStateAdmin = {
     schools: [],
     users: []
 };
 
 // ====================================================================
-// TAHAP 2: KEAMANAN & INISIALISASI
+// TAHAP 2: FUNGSI PEMBANTU UTAMA
+// ====================================================================
+
+// Fungsi ini akan membuat instance Supabase baru dengan token otentikasi saat ini.
+// Ini adalah kunci untuk mengatasi masalah "No API key found".
+function createAuthenticatedSupabaseClient() {
+    const session = supabase.auth.session();
+    if (!session) {
+        // Jika tidak ada sesi, gunakan kunci anonim dasar.
+        return supabase;
+    }
+    // Buat klien baru dengan header Authorization yang disetel secara eksplisit.
+    return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${session.access_token}`
+            }
+        }
+    });
+}
+
+
+// ====================================================================
+// TAHAP 3: KEAMANAN & INISIALISASI
 // ====================================================================
 
 async function checkSuperAdminAccess() {
     const { data: { session } } = await supabase.auth.getSession();
-
     if (!session) {
         window.location.replace('index.html');
         return;
     }
-
     if (session.user.user_metadata?.is_super_admin !== true) {
         alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
         window.location.replace('dashboard.html');
         return;
     }
-
     document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
     await loadAdminData();
     setupEventListeners();
@@ -51,9 +72,11 @@ async function checkSuperAdminAccess() {
 
 async function loadAdminData() {
     showLoading(true);
+    // Gunakan klien yang diautentikasi untuk panggilan RPC
+    const authenticatedSupabase = createAuthenticatedSupabaseClient();
     const [schoolsResponse, usersResponse] = await Promise.all([
-        supabase.from('sekolah').select('*').order('nama_sekolah'),
-        supabase.rpc('admin_get_all_users')
+        authenticatedSupabase.from('sekolah').select('*').order('nama_sekolah'),
+        authenticatedSupabase.rpc('admin_get_all_users')
     ]);
     showLoading(false);
 
@@ -68,10 +91,7 @@ async function loadAdminData() {
     populateSchoolDropdown();
 }
 
-// ====================================================================
-// TAHAP 3: FUNGSI RENDER
-// ====================================================================
-
+// ... SEMUA FUNGSI RENDER (renderSchoolsTable, renderUsersTable, populateSchoolDropdown) TETAP SAMA ...
 function renderSchoolsTable() {
     const tableBody = document.getElementById('schoolsTableBody');
     if (!tableBody) return;
@@ -82,7 +102,6 @@ function renderSchoolsTable() {
         </tr>
     `).join('') || `<tr><td colspan="2" style="text-align: center;">Belum ada sekolah terdaftar.</td></tr>`;
 }
-
 function renderUsersTable() {
     const tableBody = document.getElementById('usersTableBody');
     if (!tableBody) return;
@@ -103,7 +122,6 @@ function renderUsersTable() {
         `;
     }).join('') || `<tr><td colspan="3" style="text-align: center;">Belum ada pengguna terdaftar.</td></tr>`;
 }
-
 function populateSchoolDropdown() {
     const select = document.getElementById('userSchoolLink');
     if (!select) return;
@@ -115,11 +133,9 @@ function populateSchoolDropdown() {
         select.appendChild(option);
     });
 }
-
 // ====================================================================
-// TAHAP 4: EVENT HANDLERS
+// TAHAP 4: EVENT HANDLERS (DENGAN PERBAIKAN)
 // ====================================================================
-
 function setupEventListeners() {
     document.getElementById('formTambahSekolah')?.addEventListener('submit', handleCreateSchoolSubmit);
     document.getElementById('formPengguna')?.addEventListener('submit', handleCreateUserSubmit);
@@ -128,22 +144,6 @@ function setupEventListeners() {
             supabase.auth.signOut().then(() => window.location.href = 'index.html');
          }
     });
-}
-
-async function handleCreateSchoolSubmit(event) {
-    event.preventDefault();
-    const schoolName = document.getElementById('schoolNameInput').value;
-    if (!schoolName) return;
-
-    showLoading(true);
-    const { error } = await supabase.from('sekolah').insert({ nama_sekolah: schoolName });
-    showLoading(false);
-
-    if (error) return showStatusMessage(`Gagal membuat sekolah: ${error.message}`, 'error');
-    
-    showStatusMessage(`Sekolah "${schoolName}" berhasil dibuat.`, 'success');
-    event.target.reset();
-    await loadAdminData();
 }
 
 async function handleCreateUserSubmit(event) {
@@ -160,7 +160,9 @@ async function handleCreateUserSubmit(event) {
     }
 
     showLoading(true);
-    const { data, error } = await supabase.functions.invoke('quick-task', {
+    // Gunakan klien yang diautentikasi
+    const authenticatedSupabase = createAuthenticatedSupabaseClient();
+    const { data, error } = await authenticatedSupabase.functions.invoke('quick-task', {
         body: {
             action: 'createUser',
             payload: { email, password, schoolId }
@@ -175,20 +177,6 @@ async function handleCreateUserSubmit(event) {
     
     showStatusMessage(`Pengguna ${email} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
-    await loadAdminData();
-}
-
-async function handleDeleteSchool(schoolId, schoolName) {
-    if (!confirm(`PERINGATAN:\nMenghapus sekolah "${schoolName}" akan menghapus SEMUA data terkait (siswa, presensi, disiplin) secara permanen.\n\nLanjutkan?`)) {
-        return;
-    }
-    showLoading(true);
-    const { error } = await supabase.from('sekolah').delete().eq('id', schoolId);
-    showLoading(false);
-
-    if (error) return showStatusMessage(`Gagal menghapus sekolah: ${error.message}`, 'error');
-    
-    showStatusMessage(`Sekolah "${schoolName}" berhasil dihapus.`, 'success');
     await loadAdminData();
 }
 
@@ -210,7 +198,10 @@ async function handleChangeUserSchool(userId, userEmail) {
     showLoading(true);
 
     try {
-        const { data: currentMetaText, error: getError } = await supabase.rpc('admin_get_user_metadata', { target_user_id: userId });
+        // Gunakan klien yang diautentikasi untuk semua panggilan
+        const authenticatedSupabase = createAuthenticatedSupabaseClient();
+        
+        const { data: currentMetaText, error: getError } = await authenticatedSupabase.rpc('admin_get_user_metadata', { target_user_id: userId });
         if (getError) throw getError;
 
         let currentMetaData = {};
@@ -222,24 +213,17 @@ async function handleChangeUserSchool(userId, userEmail) {
             }
         }
         
-        // ==================================================================
-        // SOLUSI FINAL DI SINI
-        // ==================================================================
-        // Buat objek metadata BARU yang bersih.
-        // Salin field 'is_super_admin' jika ada, karena kita tidak mau menghapusnya.
         const cleanMetaData = {
             is_super_admin: currentMetaData.is_super_admin
         };
-        
-        // Timpa atau tambahkan sekolah_id dengan yang baru.
         cleanMetaData.sekolah_id = selectedSchool.id;
 
-        // Kirim objek yang sudah bersih ke server.
-        const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
+        // Kirim objek yang sudah bersih
+        // PENTING: Supabase JS akan otomatis mengubah objek JS menjadi string JSON
+        const { error: setError } = await authenticatedSupabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: cleanMetaData 
+            new_metadata: JSON.stringify(cleanMetaData) // [FIX KRUSIAL] Kirim sebagai string secara eksplisit
         });
-        // ==================================================================
         
         if (setError) throw setError;
         
@@ -252,19 +236,28 @@ async function handleChangeUserSchool(userId, userEmail) {
         showStatusMessage(`Terjadi error: ${error.message}`, 'error');
     }
 }
+// ... FUNGSI LAINNYA TETAP SAMA (handleDeleteSchool, handleDeleteUser, showLoading, showStatusMessage) ...
+async function handleDeleteSchool(schoolId, schoolName) {
+    if (!confirm(`PERINGATAN:\nMenghapus sekolah "${schoolName}" akan menghapus SEMUA data terkait (siswa, presensi, disiplin) secara permanen.\n\nLanjutkan?`)) {
+        return;
+    }
+    showLoading(true);
+    const authenticatedSupabase = createAuthenticatedSupabaseClient();
+    const { error } = await authenticatedSupabase.from('sekolah').delete().eq('id', schoolId);
+    showLoading(false);
 
+    if (error) return showStatusMessage(`Gagal menghapus sekolah: ${error.message}`, 'error');
+    
+    showStatusMessage(`Sekolah "${schoolName}" berhasil dihapus.`, 'success');
+    await loadAdminData();
+}
 async function handleDeleteUser(userId, userEmail) {
     if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) return;
     alert("Fungsionalitas hapus pengguna belum diimplementasikan di Edge Function.");
 }
-
-// ====================================================================
-// TAHAP 5: FUNGSI PEMBANTU
-// ====================================================================
 function showLoading(isLoading) {
     document.getElementById('loadingIndicator').style.display = isLoading ? 'flex' : 'none';
 }
-
 function showStatusMessage(message, type = 'info', duration = 5000) {
     const statusEl = document.getElementById('statusMessage');
     if (!statusEl) return alert(`${type.toUpperCase()}: ${message}`);
@@ -275,8 +268,7 @@ function showStatusMessage(message, type = 'info', duration = 5000) {
     window.scrollTo(0, 0);
     setTimeout(() => { statusEl.style.display = 'none'; }, duration);
 }
-
 // ====================================================================
-// TAHAP 6: ENTRY POINT
+// TAHAP 5: ENTRY POINT
 // ====================================================================
 document.addEventListener('DOMContentLoaded', checkSuperAdminAccess);
