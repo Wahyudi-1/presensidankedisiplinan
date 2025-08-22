@@ -12,10 +12,10 @@
 
 // Konfigurasi Supabase
 const SUPABASE_URL = 'https://qjlyqwuotobnzllelta.supabase.co';
-// [FIX] Menggunakan ANON KEY yang benar tanpa karakter non-ASCII
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
 const { createClient } = window.supabase;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // State Aplikasi
