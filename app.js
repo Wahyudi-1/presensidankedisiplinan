@@ -1,15 +1,17 @@
 /**
  * =================================================================
- * SCRIPT UTAMA FRONTEND - VERSI FINAL DAN LENGKAP (SEMUA FITUR)
+ * SCRIPT UTAMA FRONTEND - (DENGAN FITUR NOTIFIKASI WHATSAPP)
  * =================================================================
- * @version 7.2 - Final, All Features Included
+ * @version 6.3 - Added WhatsApp Notification Feature
  * @author Gemini AI Expert for User
  *
- * Catatan Perbaikan:
- * - [FIX] Mengembalikan fungsi `handleSiswaFileSelect` dan
- *   `handlePelanggaranFileSelect` yang sebelumnya tidak sengaja terhapus.
- * - Semua fungsionalitas lain (arsitektur tabel pengguna, scanner, WA notif)
- *   telah diverifikasi dan dipertahankan.
+ * PERUBAHAN UTAMA:
+ * - Menambahkan properti `namaSekolah` di `AppState`.
+ * - Memperbarui `initDashboardPage` untuk mengisi `namaSekolah`.
+ * - Memperbarui `filterAndRenderRekap` untuk mengambil `whatsapp_ortu`.
+ * - Memperbarui `renderRekapTable` untuk menampilkan tombol Kirim WA.
+ * - Menambahkan fungsi baru `formatPhoneNumber` dan `sendWhatsAppHandler`
+ *   untuk membuat dan mengirim pesan.
  */
 
 // ====================================================================
@@ -26,19 +28,24 @@ const AppState = {
     siswa: [],
     pelanggaran: [],
     userSekolahId: null,
-    namaSekolah: "Sekolah Kak Rose"
+    namaSekolah: "Sekolah Kak Rose" // Nilai default jika gagal memuat
 };
 
+// Variabel global untuk menyimpan instance scanner
 let qrScannerDatang = null;
 let qrScannerPulang = null;
 
 // ====================================================================
 // TAHAP 2: FUNGSI-FUNGSI PEMBANTU (HELPERS)
 // ====================================================================
+
 function showLoading(isLoading) {
     const loader = document.getElementById('loadingIndicator');
-    if (loader) loader.style.display = isLoading ? 'flex' : 'none';
+    if (loader) {
+        loader.style.display = isLoading ? 'flex' : 'none';
+    }
 }
+
 function showStatusMessage(message, type = 'info', duration = 5000) {
     const statusEl = document.getElementById('statusMessage');
     if (!statusEl) { alert(message); return; }
@@ -48,6 +55,7 @@ function showStatusMessage(message, type = 'info', duration = 5000) {
     window.scrollTo(0, 0);
     setTimeout(() => { statusEl.style.display = 'none'; }, duration);
 }
+
 function playSound(type) {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -64,6 +72,7 @@ function playSound(type) {
         oscillator.stop(audioContext.currentTime + 0.3);
     } catch (e) { console.warn("Web Audio API tidak didukung atau gagal.", e); }
 }
+
 function setupPasswordToggle() {
     const toggleIcon = document.getElementById('togglePassword');
     const passwordInput = document.getElementById('password');
@@ -85,60 +94,71 @@ function setupPasswordToggle() {
 function startQrScanner(type) {
     const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    let scannerInstance = type === 'datang' ? qrScannerDatang : qrScannerPulang;
-    if (scannerInstance && scannerInstance.isScanning) return;
+    
     const onScanSuccess = (decodedText, decodedResult) => {
-        stopQrScanner(type);
+        let currentScanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
+        if (currentScanner && typeof currentScanner.clear === 'function') {
+            currentScanner.clear();
+        }
         processQrScan(decodedText, type);
-        if(resultEl) resultEl.innerHTML = "<i>Memproses... Silakan tunggu.</i>";
         setTimeout(() => {
             const section = document.getElementById(type === 'datang' ? 'datangSection' : 'pulangSection');
             if (section && section.style.display !== 'none') {
-                 if(resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code Siswa";
                  startQrScanner(type);
+                 if(resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code Siswa";
             }
         }, 3000);
     };
+
     const onScanFailure = (error) => { /* Abaikan */ };
-    scannerInstance = new Html5Qrcode(elementId);
-    if (type === 'datang') qrScannerDatang = scannerInstance;
-    else qrScannerPulang = scannerInstance;
-    scannerInstance.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanFailure)
+    
+    let scanner = new Html5Qrcode(elementId);
+    
+    if (type === 'datang') qrScannerDatang = scanner;
+    else qrScannerPulang = scanner;
+
+    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanFailure)
     .catch(err => {
         console.error("Gagal memulai QR scanner:", err);
-        if(resultEl) resultEl.textContent = "Gagal memulai kamera. Pastikan Anda memberikan izin akses kamera di browser.";
+        if(resultEl) resultEl.textContent = "Gagal memulai kamera. Pastikan Anda memberikan izin.";
     });
 }
 
 function stopQrScanner(type) {
     let scanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
     if (scanner && scanner.isScanning) {
-        scanner.stop()
-            .then(() => {
-                const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
-                const scannerElement = document.getElementById(elementId);
-                if(scannerElement) scannerElement.innerHTML = "";
-            })
-            .catch(err => console.error(`Gagal menghentikan scanner ${type} dengan benar:`, err));
+        scanner.stop().then(() => {
+            const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
+            const scannerElement = document.getElementById(elementId);
+            if(scannerElement) scannerElement.innerHTML = "";
+        }).catch(err => console.error(`Gagal menghentikan scanner ${type}:`, err));
     }
+    if (type === 'datang') qrScannerDatang = null;
+    else qrScannerPulang = null;
 }
 
 async function checkAuthenticationAndSetup() {
     const isPasswordRecovery = window.location.hash.includes('type=recovery');
     const { data: { session } } = await supabase.auth.getSession();
+    
     if (!session && window.location.pathname.includes('dashboard.html')) {
         window.location.href = 'index.html';
         return;
     }
-    if (session && (window.location.pathname.includes('index.html') || window.location.pathname.includes('/presensidankedisiplinan/')) && !isPasswordRecovery) {
+    if (session && (window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/')) && !isPasswordRecovery) {
         const isSuperAdmin = session.user.user_metadata?.is_super_admin === true;
-        if (isSuperAdmin) window.location.href = 'superadmin.html';
-        else window.location.href = 'dashboard.html';
+        if (isSuperAdmin) {
+            window.location.href = 'superadmin.html';
+        } else {
+            window.location.href = 'dashboard.html';
+        }
         return;
     }
     if (session) {
         const welcomeEl = document.getElementById('welcomeMessage');
-        if (welcomeEl) welcomeEl.textContent = `Selamat Datang, ${session.user.email}!`;
+        if (welcomeEl) {
+             welcomeEl.textContent = `Selamat Datang, ${session.user.email}!`;
+        }
     }
 }
 
@@ -154,11 +174,15 @@ function setupAuthListener() {
             resetForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const newPassword = document.getElementById('newPassword').value;
-                if (!newPassword || newPassword.length < 6) return showStatusMessage('Password baru minimal 6 karakter.', 'error');
+                if (!newPassword || newPassword.length < 6) {
+                    return showStatusMessage('Password baru minimal 6 karakter.', 'error');
+                }
                 showLoading(true);
                 const { error } = await supabase.auth.updateUser({ password: newPassword });
                 showLoading(false);
-                if (error) return showStatusMessage(`Gagal memperbarui password: ${error.message}`, 'error');
+                if (error) {
+                    return showStatusMessage(`Gagal memperbarui password: ${error.message}`, 'error');
+                }
                 showStatusMessage('Password berhasil diperbarui! Silakan login dengan password baru Anda.', 'success');
                 setTimeout(() => {
                     window.location.hash = '';
@@ -173,17 +197,24 @@ function setupAuthListener() {
 async function handleLogin() {
     const usernameEl = document.getElementById('username');
     const passwordEl = document.getElementById('password');
-    if (!usernameEl.value || !passwordEl.value) return showStatusMessage("Email dan password harus diisi.", 'error');
+    if (!usernameEl.value || !passwordEl.value) {
+        return showStatusMessage("Email dan password harus diisi.", 'error');
+    }
     showLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({
         email: usernameEl.value,
         password: passwordEl.value,
     });
     showLoading(false);
-    if (error) return showStatusMessage(`Login Gagal: ${error.message}`, 'error');
+    if (error) {
+        return showStatusMessage(`Login Gagal: ${error.message}`, 'error');
+    }
     const isSuperAdmin = data.user.user_metadata?.is_super_admin === true;
-    if (isSuperAdmin) window.location.href = 'superadmin.html';
-    else window.location.href = 'dashboard.html';
+    if (isSuperAdmin) {
+        window.location.href = 'superadmin.html';
+    } else {
+        window.location.href = 'dashboard.html';
+    }
 }
 
 async function handleLogout() {
@@ -191,28 +222,43 @@ async function handleLogout() {
         showLoading(true);
         const { error } = await supabase.auth.signOut();
         showLoading(false);
-        if (error) alert('Gagal logout: ' + error.message);
-        else window.location.href = 'index.html';
+        if (error) {
+            alert('Gagal logout: ' + error.message);
+        } else {
+            window.location.href = 'index.html';
+        }
     }
 }
 
 async function handleForgotPassword() {
     const emailEl = document.getElementById('username');
     const email = emailEl.value;
-    if (!email) return showStatusMessage('Silakan masukkan alamat email Anda terlebih dahulu.', 'error');
-    if (!confirm(`Anda akan mengirimkan link reset password ke alamat: ${email}. Lanjutkan?`)) return;
+    if (!email) {
+        return showStatusMessage('Silakan masukkan alamat email Anda terlebih dahulu, lalu klik "Lupa Password?".', 'error');
+    }
+    if (!confirm(`Anda akan mengirimkan link reset password ke alamat: ${email}. Lanjutkan?`)) {
+        return;
+    }
     showLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname,
+    });
     showLoading(false);
-    if (error) return showStatusMessage(`Gagal mengirim email: ${error.message}`, 'error');
-    showStatusMessage('Email untuk reset password telah dikirim! Silakan periksa kotak masuk Anda.', 'success');
+    if (error) {
+        return showStatusMessage(`Gagal mengirim email: ${error.message}`, 'error');
+    }
+    showStatusMessage('Email untuk reset password telah dikirim! Silakan periksa kotak masuk (dan folder spam) Anda.', 'success');
 }
 
 async function processQrScan(nisn, type) {
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    const { data: siswa, error: siswaError } = await supabase.from('siswa').select('nama').eq('nisn', nisn).single();
+    const { data: siswa, error: siswaError } = await supabase
+        .from('siswa')
+        .select('nama')
+        .eq('nisn', nisn)
+        .single();
     if (siswaError || !siswa) {
-        const errorMessage = `Siswa dengan NISN ${nisn} tidak terdaftar.`;
+        const errorMessage = `Siswa dengan NISN ${nisn} tidak terdaftar di sekolah Anda.`;
         resultEl.className = 'scan-result error';
         resultEl.textContent = errorMessage;
         playSound('error');
@@ -223,9 +269,15 @@ async function processQrScan(nisn, type) {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const { data: presensiHariIni, error: cekError } = await supabase.from('presensi').select('waktu_datang, waktu_pulang').eq('nisn_siswa', nisn).gte('waktu_datang', today.toISOString()).lt('waktu_datang', tomorrow.toISOString()).maybeSingle();
+    const { data: presensiHariIni, error: cekError } = await supabase
+        .from('presensi')
+        .select('waktu_datang, waktu_pulang')
+        .eq('nisn_siswa', nisn)
+        .gte('waktu_datang', today.toISOString())
+        .lt('waktu_datang', tomorrow.toISOString())
+        .maybeSingle(); 
     if (cekError) {
-        const errorMessage = `Gagal memeriksa presensi: ${cekError.message}`;
+        const errorMessage = `Gagal memeriksa data presensi: ${cekError.message}`;
         resultEl.className = 'scan-result error';
         resultEl.textContent = errorMessage;
         playSound('error');
@@ -233,13 +285,19 @@ async function processQrScan(nisn, type) {
     }
     if (type === 'datang') {
         if (presensiHariIni) {
-            const errorMessage = `DITOLAK: ${siswa.nama} sudah presensi datang.`;
+            const errorMessage = `DITOLAK: ${siswa.nama} sudah melakukan presensi datang hari ini.`;
             resultEl.className = 'scan-result error';
             resultEl.textContent = errorMessage;
             playSound('error');
             return;
         }
-        const { error: insertError } = await supabase.from('presensi').insert({ nisn_siswa: nisn, waktu_datang: new Date(), sekolah_id: AppState.userSekolahId });
+        const { error: insertError } = await supabase
+            .from('presensi')
+            .insert({ 
+                nisn_siswa: nisn, 
+                waktu_datang: new Date(),
+                sekolah_id: AppState.userSekolahId
+            });
         if (insertError) {
             resultEl.className = 'scan-result error';
             resultEl.textContent = `Gagal menyimpan: ${insertError.message}`;
@@ -248,25 +306,29 @@ async function processQrScan(nisn, type) {
             const waktu = new Date().toLocaleTimeString('id-ID');
             playSound('success');
             resultEl.className = 'scan-result success';
-            resultEl.innerHTML = `<strong>Berhasil!</strong><br>${siswa.nama} (${nisn}) - ${waktu}`;
+            resultEl.innerHTML = `<strong>Presensi Datang Berhasil!</strong><br>${siswa.nama} (${nisn}) - ${waktu}`;
             loadAndRenderDailyLog('datang');
         }
-    } else {
+    } else { 
         if (!presensiHariIni) {
-            const errorMessage = `DITOLAK: ${siswa.nama} belum presensi datang.`;
+            const errorMessage = `DITOLAK: ${siswa.nama} belum melakukan presensi datang hari ini.`;
             resultEl.className = 'scan-result error';
             resultEl.textContent = errorMessage;
             playSound('error');
             return;
         }
         if (presensiHariIni && presensiHariIni.waktu_pulang) {
-            const errorMessage = `DITOLAK: ${siswa.nama} sudah presensi pulang.`;
+            const errorMessage = `DITOLAK: ${siswa.nama} sudah melakukan presensi pulang hari ini.`;
             resultEl.className = 'scan-result error';
             resultEl.textContent = errorMessage;
             playSound('error');
             return;
         }
-        const { error: updateError } = await supabase.from('presensi').update({ waktu_pulang: new Date() }).eq('nisn_siswa', nisn).gte('waktu_datang', today.toISOString());
+        const { error: updateError } = await supabase
+            .from('presensi')
+            .update({ waktu_pulang: new Date() })
+            .eq('nisn_siswa', nisn)
+            .gte('waktu_datang', today.toISOString());
         if (updateError) {
             resultEl.className = 'scan-result error';
             resultEl.textContent = `Gagal menyimpan: ${updateError.message}`;
@@ -275,7 +337,7 @@ async function processQrScan(nisn, type) {
             const waktu = new Date().toLocaleTimeString('id-ID');
             playSound('success');
             resultEl.className = 'scan-result success';
-            resultEl.innerHTML = `<strong>Berhasil!</strong><br>${siswa.nama} (${nisn}) - ${waktu}`;
+            resultEl.innerHTML = `<strong>Presensi Pulang Berhasil!</strong><br>${siswa.nama} (${nisn}) - ${waktu}`;
             loadAndRenderDailyLog('pulang');
         }
     }
@@ -289,14 +351,19 @@ async function loadAndRenderDailyLog(type) {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const { data, error } = await supabase.from('presensi').select('waktu_datang, waktu_pulang, siswa (nisn, nama)').gte('waktu_datang', today.toISOString()).lt('waktu_datang', tomorrow.toISOString()).order('waktu_datang', { ascending: false });
+    const { data, error } = await supabase
+        .from('presensi')
+        .select('waktu_datang, waktu_pulang, siswa (nisn, nama)')
+        .gte('waktu_datang', today.toISOString())
+        .lt('waktu_datang', tomorrow.toISOString())
+        .order('waktu_datang', { ascending: false });
     if (error) {
         console.error(`Gagal memuat log ${type}:`, error);
         tableBody.innerHTML = `<tr><td colspan="3">Gagal memuat data.</td></tr>`;
         return;
     }
     tableBody.innerHTML = data.length === 0
-        ? `<tr><td colspan="3" style="text-align: center;">Belum ada data.</td></tr>`
+        ? `<tr><td colspan="3" style="text-align: center;">Belum ada data presensi hari ini.</td></tr>`
         : data.map(row => {
             const waktuTampil = type === 'datang' ? row.waktu_datang : row.waktu_pulang;
             if (type === 'pulang' && !waktuTampil) return '';
@@ -309,7 +376,11 @@ async function filterAndRenderRekap() {
     const endDateStr = document.getElementById('rekapFilterTanggalSelesai').value;
     if (!startDateStr || !endDateStr) return showStatusMessage('Harap pilih rentang tanggal.', 'error');
     showLoading(true);
-    const { data, error } = await supabase.from('presensi').select(`waktu_datang, waktu_pulang, status, siswa ( nisn, nama, whatsapp_ortu )`).gte('waktu_datang', startDateStr).lte('waktu_datang', `${endDateStr}T23:59:59`);
+    const { data, error } = await supabase
+        .from('presensi')
+        .select(`waktu_datang, waktu_pulang, status, siswa ( nisn, nama, whatsapp_ortu )`)
+        .gte('waktu_datang', startDateStr)
+        .lte('waktu_datang', `${endDateStr}T23:59:59`);
     showLoading(false);
     if (error) return showStatusMessage(`Gagal memuat rekap: ${error.message}`, 'error');
     renderRekapTable(data);
@@ -319,34 +390,77 @@ async function filterAndRenderRekap() {
 function renderRekapTable(data) {
     const tableBody = document.getElementById('rekapTableBody');
     if (!data || data.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data rekap ditemukan.</td></tr>';
         return;
     }
     tableBody.innerHTML = data.map(row => {
         const datangDate = new Date(row.waktu_datang);
         const pulangDate = row.waktu_pulang ? new Date(row.waktu_pulang) : null;
         const waButton = row.siswa?.whatsapp_ortu
-            ? `<button class="btn btn-sm btn-success" style="display: flex; align-items: center; gap: 5px;" onclick="sendWhatsAppHandler('${row.siswa.nama.replace(/'/g, "\\'")}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang || ''}')"><svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 448 512" fill="white"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.8 0-67.6-9.5-97.8-26.7l-7.1-4.2-72.2 18.9L96 357.3l-4.5-7.3c-18.4-29.8-28.2-63.6-28.2-98.8 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg> Kirim</button>`
+            ? `<button 
+                 class="btn btn-sm btn-success" 
+                 style="display: flex; align-items: center; gap: 5px;"
+                 onclick="sendWhatsAppHandler('${row.siswa.nama.replace(/'/g, "\\'")}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang || ''}')">
+                 <svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 448 512" fill="white"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.8 0-67.6-9.5-97.8-26.7l-7.1-4.2-72.2 18.9L96 357.3l-4.5-7.3c-18.4-29.8-28.2-63.6-28.2-98.8 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                 Kirim
+               </button>`
             : '<span>-</span>';
-        return `<tr><td data-label="Tanggal">${datangDate.toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'})}</td><td data-label="NISN">${row.siswa?.nisn || '-'}</td><td data-label="Nama">${row.siswa?.nama || 'Siswa Dihapus'}</td><td data-label="Datang">${datangDate.toLocaleTimeString('id-ID')}</td><td data-label="Pulang">${pulangDate ? pulangDate.toLocaleTimeString('id-ID') : 'Belum'}</td><td data-label="Status">${row.status || '-'}</td><td data-label="Aksi">${waButton}</td></tr>`;
+        return `<tr>
+            <td data-label="Tanggal">${datangDate.toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'})}</td>
+            <td data-label="NISN">${row.siswa?.nisn || '-'}</td>
+            <td data-label="Nama">${row.siswa?.nama || 'Siswa Dihapus'}</td>
+            <td data-label="Datang">${datangDate.toLocaleTimeString('id-ID')}</td>
+            <td data-label="Pulang">${pulangDate ? pulangDate.toLocaleTimeString('id-ID') : 'Belum'}</td>
+            <td data-label="Status">${row.status || '-'}</td>
+            <td data-label="Aksi">${waButton}</td>
+        </tr>`;
     }).join('');
 }
+
 function formatPhoneNumber(number) {
     let cleanNumber = ('' + number).replace(/\D/g, '');
-    if (cleanNumber.startsWith('0')) cleanNumber = '62' + cleanNumber.substring(1);
-    else if (!cleanNumber.startsWith('62')) cleanNumber = '62' + cleanNumber;
+    if (cleanNumber.startsWith('0')) {
+        cleanNumber = '62' + cleanNumber.substring(1);
+    }
+    else if (!cleanNumber.startsWith('62')) {
+        cleanNumber = '62' + cleanNumber;
+    }
     return cleanNumber;
 }
+
 function sendWhatsAppHandler(namaSiswa, nomorWhatsapp, waktuDatangISO, waktuPulangISO) {
-    if (!nomorWhatsapp) return alert('Nomor WhatsApp wali murid tidak terdaftar.');
+    if (!nomorWhatsapp) {
+        alert('Nomor WhatsApp untuk wali murid ini tidak terdaftar.');
+        return;
+    }
     const formattedNumber = formatPhoneNumber(nomorWhatsapp);
-    const waktuDatang = new Date(waktuDatangISO).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const waktuPulang = waktuPulangISO ? new Date(waktuPulangISO).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Belum melakukan presensi pulang';
-    const templatePesan = `Assalamualaikum Wr. Wb.\nYth. Bapak/Ibu Wali Murid dari ananda ${namaSiswa},\n\nDengan hormat, kami dari ${AppState.namaSekolah} memberitahukan rekap presensi ananda hari ini:\n- *Waktu Datang:* ${waktuDatang}\n- *Waktu Pulang:* ${waktuPulang}\n\nTerima kasih atas perhatiannya.\n\nWassalamualaikum Wr. Wb.\nHormat kami,\n*${AppState.namaSekolah}*`;
+    const waktuDatang = new Date(waktuDatangISO).toLocaleString('id-ID', {
+        day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    const waktuPulang = waktuPulangISO
+        ? new Date(waktuPulangISO).toLocaleString('id-ID', {
+            hour: '2-digit', minute: '2-digit'
+          })
+        : 'Belum melakukan presensi pulang';
+    const templatePesan = `
+Assalamualaikum Wr. Wb.
+Yth. Bapak/Ibu Wali Murid dari ananda ${namaSiswa},
+
+Dengan hormat, kami dari ${AppState.namaSekolah} memberitahukan rekap presensi ananda hari ini:
+- *Waktu Datang:* ${waktuDatang}
+- *Waktu Pulang:* ${waktuPulang}
+
+Terima kasih atas perhatiannya.
+
+Wassalamualaikum Wr. Wb.
+Hormat kami,
+*${AppState.namaSekolah}*
+    `;
     const encodedMessage = encodeURIComponent(templatePesan.trim());
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedNumber}&text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
 }
+
 async function loadSiswaAndRenderTable(force = false) {
     if (!force && AppState.siswa.length > 0) {
         renderSiswaTable(AppState.siswa);
@@ -356,14 +470,27 @@ async function loadSiswaAndRenderTable(force = false) {
     const { data, error } = await supabase.from('siswa').select('*').order('nama', { ascending: true });
     showLoading(false);
     if (error) return showStatusMessage(`Gagal memuat data siswa: ${error.message}`, 'error');
-    AppState.siswa = data.map(s => ({ NISN: s.nisn, Nama: s.nama, Kelas: s.kelas, WhatsappOrtu: s.whatsapp_ortu }));
+    AppState.siswa = data.map(s => ({
+        NISN: s.nisn, Nama: s.nama, Kelas: s.kelas, WhatsappOrtu: s.whatsapp_ortu
+    }));
     renderSiswaTable(AppState.siswa);
 }
 function renderSiswaTable(siswaArray) {
     const tableBody = document.getElementById('siswaResultsTableBody');
     tableBody.innerHTML = siswaArray.length === 0
         ? '<tr><td colspan="5" style="text-align: center;">Data siswa tidak ditemukan.</td></tr>'
-        : siswaArray.map(siswa => `<tr><td data-label="NISN">${siswa.NISN}</td><td data-label="Nama">${siswa.Nama}</td><td data-label="Kelas">${siswa.Kelas || '-'}</td><td data-label="Whatsapp Ortu">${siswa.WhatsappOrtu || '-'}</td><td data-label="Aksi"><button class="btn btn-sm btn-primary" onclick="generateQRHandler('${siswa.NISN}')">QR</button><button class="btn btn-sm btn-secondary" onclick="editSiswaHandler('${siswa.NISN}')">Ubah</button><button class="btn btn-sm btn-danger" onclick="deleteSiswaHandler('${siswa.NISN}')">Hapus</button></td></tr>`).join('');
+        : siswaArray.map(siswa => `
+            <tr>
+                <td data-label="NISN">${siswa.NISN}</td>
+                <td data-label="Nama">${siswa.Nama}</td>
+                <td data-label="Kelas">${siswa.Kelas || '-'}</td>
+                <td data-label="Whatsapp Ortu">${siswa.WhatsappOrtu || '-'}</td>
+                <td data-label="Aksi">
+                    <button class="btn btn-sm btn-primary" onclick="generateQRHandler('${siswa.NISN}')">QR</button>
+                    <button class="btn btn-sm btn-secondary" onclick="editSiswaHandler('${siswa.NISN}')">Ubah</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSiswaHandler('${siswa.NISN}')">Hapus</button>
+                </td>
+            </tr>`).join('');
 }
 async function saveSiswa() {
     const oldNisn = document.getElementById('formNisnOld').value;
@@ -421,13 +548,15 @@ async function handleSiswaFileSelect(event) {
                 showLoading(false);
                 return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
             }
-            const dataToInsert = results.data.filter(row => (row.NISN || row.Nisn || row.nisn)?.trim()).map(row => ({
-                nisn: row.NISN || row.Nisn || row.nisn,
-                nama: row.Nama || row.nama,
-                kelas: row.Kelas || row.kelas,
-                whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
-                sekolah_id: AppState.userSekolahId
-            }));
+            const dataToInsert = results.data
+                .filter(row => (row.NISN || row.Nisn || row.nisn)?.trim())
+                .map(row => ({
+                    nisn: row.NISN || row.Nisn || row.nisn,
+                    nama: row.Nama || row.nama,
+                    kelas: row.Kelas || row.kelas,
+                    whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
+                    sekolah_id: AppState.userSekolahId
+                }));
             if (dataToInsert.length === 0) {
                 showLoading(false);
                 return showStatusMessage('Tidak ada data siswa yang valid untuk diimpor.', 'info');
@@ -457,7 +586,7 @@ async function handlePelanggaranFileSelect(event) {
                 return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
             }
             const dataToInsert = results.data.map(row => ({
-                tingkat: row.Tingkat, deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, poin: row.Poin, sekolah_id: AppState.userSekolahId
+                tingkat: row.Tingkat, deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, poin: row.Poin
             }));
             const { error } = await supabase.from('pelanggaran').insert(dataToInsert);
             showLoading(false);
