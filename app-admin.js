@@ -1,16 +1,15 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DEFINITIF)
+ * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DEFINITIF V2)
  * =================================================================
- * @version 2.0 - Final Definitive Fix
+ * @version 2.1 - Ultra-Defensive Final Fix
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - Menggunakan inisialisasi klien Supabase yang benar.
- * - Memanggil Edge Function 'quick-task' dengan benar.
- * - [FINAL FIX] Menyesuaikan panggilan RPC 'admin_set_user_metadata'
- *   untuk mengirim objek JavaScript secara langsung, sesuai dengan
- *   definisi fungsi SQL yang sekarang mengharapkan tipe data JSONB.
+ * - Memastikan semua panggilan RPC menggunakan objek `supabase` yang benar.
+ * - [ULTRA-DEFENSIVE FIX] Secara eksplisit menggunakan JSON.stringify()
+ *   untuk mengirim metadata sebagai TEXT, sesuai dengan fungsi SQL
+ *   paling defensif untuk menghindari bug lapisan perantara.
  */
 
 // ====================================================================
@@ -169,17 +168,10 @@ async function handleChangeUserSchool(userId, userEmail) {
         const cleanMetaData = { is_super_admin: currentMetaData.is_super_admin };
         cleanMetaData.sekolah_id = selectedSchool.id;
 
-        // ==================================================================
-        // PERBAIKAN FINAL DAN DEFINITIF ADA DI SINI
-        // ==================================================================
-        // Kita mengirim objek JavaScript secara langsung.
-        // Supabase-js akan menanganinya dengan benar ketika fungsi SQL
-        // mengharapkan tipe data JSONB.
         const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: cleanMetaData 
+            new_metadata: JSON.stringify(cleanMetaData)
         });
-        // ==================================================================
         
         if (setError) throw setError;
         
