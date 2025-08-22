@@ -2,16 +2,13 @@
  * =================================================================
  * SCRIPT UTAMA FRONTEND - (DENGAN FITUR NOTIFIKASI WHATSAPP)
  * =================================================================
- * @version 6.3 - Added WhatsApp Notification Feature
+ * @version 6.4 - Fixed QR Scanner Logic
  * @author Gemini AI Expert for User
  *
  * PERUBAHAN UTAMA:
- * - Menambahkan properti `namaSekolah` di `AppState`.
- * - Memperbarui `initDashboardPage` untuk mengisi `namaSekolah`.
- * - Memperbarui `filterAndRenderRekap` untuk mengambil `whatsapp_ortu`.
- * - Memperbarui `renderRekapTable` untuk menampilkan tombol Kirim WA.
- * - Menambahkan fungsi baru `formatPhoneNumber` dan `sendWhatsAppHandler`
- *   untuk membuat dan mengirim pesan.
+ * - [CRITICAL FIX] Memperbaiki implementasi `startQrScanner` dan `stopQrScanner`
+ *   agar kamera aktif dan dapat memindai QR code dengan andal.
+ * - Semua fitur lain yang sudah ada tetap dipertahankan.
  */
 
 // ====================================================================
@@ -91,51 +88,66 @@ function setupPasswordToggle() {
 // TAHAP 3: FUNGSI-FUNGSI UTAMA
 // ====================================================================
 
+// ======================= PERUBAHAN DI SINI =======================
 function startQrScanner(type) {
     const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    
+    let scannerInstance = type === 'datang' ? qrScannerDatang : qrScannerPulang;
+
+    // Jangan mulai scanner baru jika sudah ada yang aktif
+    if (scannerInstance && scannerInstance.isScanning) {
+        return;
+    }
+
     const onScanSuccess = (decodedText, decodedResult) => {
-        let currentScanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
-        if (currentScanner && typeof currentScanner.clear === 'function') {
-            currentScanner.clear();
-        }
+        // Hentikan pemindaian agar tidak memindai berulang kali
+        stopQrScanner(type);
+        // Proses data yang didapat dari QR code
         processQrScan(decodedText, type);
+        
+        // Atur pesan dan siapkan untuk pemindaian berikutnya setelah jeda
+        if(resultEl) resultEl.innerHTML = "<i>Memproses... Silakan tunggu.</i>";
         setTimeout(() => {
             const section = document.getElementById(type === 'datang' ? 'datangSection' : 'pulangSection');
             if (section && section.style.display !== 'none') {
-                 startQrScanner(type);
                  if(resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code Siswa";
+                 startQrScanner(type); // Coba mulai lagi untuk siswa berikutnya
             }
         }, 3000);
     };
 
-    const onScanFailure = (error) => { /* Abaikan */ };
+    const onScanFailure = (error) => { /* Abaikan error "QR code not found" */ };
     
-    let scanner = new Html5Qrcode(elementId);
+    scannerInstance = new Html5Qrcode(elementId);
     
-    if (type === 'datang') qrScannerDatang = scanner;
-    else qrScannerPulang = scanner;
+    if (type === 'datang') {
+        qrScannerDatang = scannerInstance;
+    } else {
+        qrScannerPulang = scannerInstance;
+    }
 
-    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanFailure)
+    scannerInstance.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanFailure)
     .catch(err => {
         console.error("Gagal memulai QR scanner:", err);
-        if(resultEl) resultEl.textContent = "Gagal memulai kamera. Pastikan Anda memberikan izin.";
+        if(resultEl) resultEl.textContent = "Gagal memulai kamera. Pastikan Anda memberikan izin akses kamera di browser.";
     });
 }
 
 function stopQrScanner(type) {
     let scanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
     if (scanner && scanner.isScanning) {
-        scanner.stop().then(() => {
-            const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
-            const scannerElement = document.getElementById(elementId);
-            if(scannerElement) scannerElement.innerHTML = "";
-        }).catch(err => console.error(`Gagal menghentikan scanner ${type}:`, err));
+        scanner.stop()
+            .then(() => {
+                const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
+                const scannerElement = document.getElementById(elementId);
+                // Kosongkan div setelah scanner dihentikan untuk membersihkan UI
+                if(scannerElement) scannerElement.innerHTML = "";
+            })
+            .catch(err => console.error(`Gagal menghentikan scanner ${type} dengan benar:`, err));
     }
-    if (type === 'datang') qrScannerDatang = null;
-    else qrScannerPulang = null;
 }
+// ===================== AKHIR DARI PERUBAHAN ====================
+
 
 async function checkAuthenticationAndSetup() {
     const isPasswordRecovery = window.location.hash.includes('type=recovery');
@@ -145,7 +157,7 @@ async function checkAuthenticationAndSetup() {
         window.location.href = 'index.html';
         return;
     }
-    if (session && (window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/')) && !isPasswordRecovery) {
+    if (session && (window.location.pathname.includes('index.html') || window.location.pathname.includes('/presensidankedisiplinan/')) && !isPasswordRecovery) {
         const isSuperAdmin = session.user.user_metadata?.is_super_admin === true;
         if (isSuperAdmin) {
             window.location.href = 'superadmin.html';
@@ -397,23 +409,9 @@ function renderRekapTable(data) {
         const datangDate = new Date(row.waktu_datang);
         const pulangDate = row.waktu_pulang ? new Date(row.waktu_pulang) : null;
         const waButton = row.siswa?.whatsapp_ortu
-            ? `<button 
-                 class="btn btn-sm btn-success" 
-                 style="display: flex; align-items: center; gap: 5px;"
-                 onclick="sendWhatsAppHandler('${row.siswa.nama.replace(/'/g, "\\'")}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang || ''}')">
-                 <svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 448 512" fill="white"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.8 0-67.6-9.5-97.8-26.7l-7.1-4.2-72.2 18.9L96 357.3l-4.5-7.3c-18.4-29.8-28.2-63.6-28.2-98.8 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
-                 Kirim
-               </button>`
+            ? `<button class="btn btn-sm btn-success" style="display: flex; align-items-center; gap: 5px;" onclick="sendWhatsAppHandler('${row.siswa.nama.replace(/'/g, "\\'")}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang || ''}')"><svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 448 512" fill="white"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.8 0-67.6-9.5-97.8-26.7l-7.1-4.2-72.2 18.9L96 357.3l-4.5-7.3c-18.4-29.8-28.2-63.6-28.2-98.8 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg> Kirim</button>`
             : '<span>-</span>';
-        return `<tr>
-            <td data-label="Tanggal">${datangDate.toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'})}</td>
-            <td data-label="NISN">${row.siswa?.nisn || '-'}</td>
-            <td data-label="Nama">${row.siswa?.nama || 'Siswa Dihapus'}</td>
-            <td data-label="Datang">${datangDate.toLocaleTimeString('id-ID')}</td>
-            <td data-label="Pulang">${pulangDate ? pulangDate.toLocaleTimeString('id-ID') : 'Belum'}</td>
-            <td data-label="Status">${row.status || '-'}</td>
-            <td data-label="Aksi">${waButton}</td>
-        </tr>`;
+        return `<tr><td data-label="Tanggal">${datangDate.toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'})}</td><td data-label="NISN">${row.siswa?.nisn || '-'}</td><td data-label="Nama">${row.siswa?.nama || 'Siswa Dihapus'}</td><td data-label="Datang">${datangDate.toLocaleTimeString('id-ID')}</td><td data-label="Pulang">${pulangDate ? pulangDate.toLocaleTimeString('id-ID') : 'Belum'}</td><td data-label="Status">${row.status || '-'}</td><td data-label="Aksi">${waButton}</td></tr>`;
     }).join('');
 }
 
@@ -434,28 +432,9 @@ function sendWhatsAppHandler(namaSiswa, nomorWhatsapp, waktuDatangISO, waktuPula
         return;
     }
     const formattedNumber = formatPhoneNumber(nomorWhatsapp);
-    const waktuDatang = new Date(waktuDatangISO).toLocaleString('id-ID', {
-        day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-    const waktuPulang = waktuPulangISO
-        ? new Date(waktuPulangISO).toLocaleString('id-ID', {
-            hour: '2-digit', minute: '2-digit'
-          })
-        : 'Belum melakukan presensi pulang';
-    const templatePesan = `
-Assalamualaikum Wr. Wb.
-Yth. Bapak/Ibu Wali Murid dari ananda ${namaSiswa},
-
-Dengan hormat, kami dari ${AppState.namaSekolah} memberitahukan rekap presensi ananda hari ini:
-- *Waktu Datang:* ${waktuDatang}
-- *Waktu Pulang:* ${waktuPulang}
-
-Terima kasih atas perhatiannya.
-
-Wassalamualaikum Wr. Wb.
-Hormat kami,
-*${AppState.namaSekolah}*
-    `;
+    const waktuDatang = new Date(waktuDatangISO).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const waktuPulang = waktuPulangISO ? new Date(waktuPulangISO).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Belum melakukan presensi pulang';
+    const templatePesan = `Assalamualaikum Wr. Wb.\nYth. Bapak/Ibu Wali Murid dari ananda ${namaSiswa},\n\nDengan hormat, kami dari ${AppState.namaSekolah} memberitahukan rekap presensi ananda hari ini:\n- *Waktu Datang:* ${waktuDatang}\n- *Waktu Pulang:* ${waktuPulang}\n\nTerima kasih atas perhatiannya.\n\nWassalamualaikum Wr. Wb.\nHormat kami,\n*${AppState.namaSekolah}*`;
     const encodedMessage = encodeURIComponent(templatePesan.trim());
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedNumber}&text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
@@ -470,27 +449,14 @@ async function loadSiswaAndRenderTable(force = false) {
     const { data, error } = await supabase.from('siswa').select('*').order('nama', { ascending: true });
     showLoading(false);
     if (error) return showStatusMessage(`Gagal memuat data siswa: ${error.message}`, 'error');
-    AppState.siswa = data.map(s => ({
-        NISN: s.nisn, Nama: s.nama, Kelas: s.kelas, WhatsappOrtu: s.whatsapp_ortu
-    }));
+    AppState.siswa = data.map(s => ({ NISN: s.nisn, Nama: s.nama, Kelas: s.kelas, WhatsappOrtu: s.whatsapp_ortu }));
     renderSiswaTable(AppState.siswa);
 }
 function renderSiswaTable(siswaArray) {
     const tableBody = document.getElementById('siswaResultsTableBody');
     tableBody.innerHTML = siswaArray.length === 0
         ? '<tr><td colspan="5" style="text-align: center;">Data siswa tidak ditemukan.</td></tr>'
-        : siswaArray.map(siswa => `
-            <tr>
-                <td data-label="NISN">${siswa.NISN}</td>
-                <td data-label="Nama">${siswa.Nama}</td>
-                <td data-label="Kelas">${siswa.Kelas || '-'}</td>
-                <td data-label="Whatsapp Ortu">${siswa.WhatsappOrtu || '-'}</td>
-                <td data-label="Aksi">
-                    <button class="btn btn-sm btn-primary" onclick="generateQRHandler('${siswa.NISN}')">QR</button>
-                    <button class="btn btn-sm btn-secondary" onclick="editSiswaHandler('${siswa.NISN}')">Ubah</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSiswaHandler('${siswa.NISN}')">Hapus</button>
-                </td>
-            </tr>`).join('');
+        : siswaArray.map(siswa => `<tr><td data-label="NISN">${siswa.NISN}</td><td data-label="Nama">${siswa.Nama}</td><td data-label="Kelas">${siswa.Kelas || '-'}</td><td data-label="Whatsapp Ortu">${siswa.WhatsappOrtu || '-'}</td><td data-label="Aksi"><button class="btn btn-sm btn-primary" onclick="generateQRHandler('${siswa.NISN}')">QR</button><button class="btn btn-sm btn-secondary" onclick="editSiswaHandler('${siswa.NISN}')">Ubah</button><button class="btn btn-sm btn-danger" onclick="deleteSiswaHandler('${siswa.NISN}')">Hapus</button></td></tr>`).join('');
 }
 async function saveSiswa() {
     const oldNisn = document.getElementById('formNisnOld').value;
@@ -548,15 +514,13 @@ async function handleSiswaFileSelect(event) {
                 showLoading(false);
                 return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
             }
-            const dataToInsert = results.data
-                .filter(row => (row.NISN || row.Nisn || row.nisn)?.trim())
-                .map(row => ({
-                    nisn: row.NISN || row.Nisn || row.nisn,
-                    nama: row.Nama || row.nama,
-                    kelas: row.Kelas || row.kelas,
-                    whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
-                    sekolah_id: AppState.userSekolahId
-                }));
+            const dataToInsert = results.data.filter(row => (row.NISN || row.Nisn || row.nisn)?.trim()).map(row => ({
+                nisn: row.NISN || row.Nisn || row.nisn,
+                nama: row.Nama || row.nama,
+                kelas: row.Kelas || row.kelas,
+                whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
+                sekolah_id: AppState.userSekolahId
+            }));
             if (dataToInsert.length === 0) {
                 showLoading(false);
                 return showStatusMessage('Tidak ada data siswa yang valid untuk diimpor.', 'info');
@@ -586,7 +550,7 @@ async function handlePelanggaranFileSelect(event) {
                 return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
             }
             const dataToInsert = results.data.map(row => ({
-                tingkat: row.Tingkat, deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, poin: row.Poin
+                tingkat: row.Tingkat, deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, poin: row.Poin, sekolah_id: AppState.userSekolahId
             }));
             const { error } = await supabase.from('pelanggaran').insert(dataToInsert);
             showLoading(false);
