@@ -1,14 +1,16 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DIPERBAIKI)
+ * SCRIPT PANEL SUPER ADMIN - (SOLUSI FINAL DEFINITIF)
  * =================================================================
- * @version 1.7 - Fixed Supabase client initialization error
+ * @version 2.0 - Final Definitive Fix
  * @author Gemini AI Expert for User
  *
  * Catatan Perbaikan:
- * - [FIX] Memperbaiki "ReferenceError: Cannot access 'supabase' before initialization"
- *   dengan menggunakan metode inisialisasi klien Supabase yang benar.
- * - Semua perbaikan sebelumnya tetap dipertahankan.
+ * - Menggunakan inisialisasi klien Supabase yang benar.
+ * - Memanggil Edge Function 'quick-task' dengan benar.
+ * - [FINAL FIX] Menyesuaikan panggilan RPC 'admin_set_user_metadata'
+ *   untuk mengirim objek JavaScript secara langsung, sesuai dengan
+ *   definisi fungsi SQL yang sekarang mengharapkan tipe data JSONB.
  */
 
 // ====================================================================
@@ -17,17 +19,9 @@
 const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
-// =======================================================================
-// PERBAIKAN UTAMA DI SINI
-// =======================================================================
-// Inisialisasi klien Supabase menggunakan library global yang sudah dimuat oleh HTML.
 const { createClient } = window.supabase;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// =======================================================================
-// AKHIR DARI PERBAIKAN
-// =======================================================================
 
-// State Aplikasi
 const AppStateAdmin = {
     schools: [],
     users: []
@@ -72,16 +66,11 @@ async function loadAdminData() {
     populateSchoolDropdown();
 }
 
-// ... SEMUA FUNGSI RENDER (renderSchoolsTable, renderUsersTable, populateSchoolDropdown) TETAP SAMA ...
+// ... SEMUA FUNGSI RENDER TETAP SAMA ...
 function renderSchoolsTable() {
     const tableBody = document.getElementById('schoolsTableBody');
     if (!tableBody) return;
-    tableBody.innerHTML = AppStateAdmin.schools.map(school => `
-        <tr>
-            <td>${school.nama_sekolah}</td>
-            <td><button class="btn btn-sm btn-danger" onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah}')">Hapus</button></td>
-        </tr>
-    `).join('') || `<tr><td colspan="2" style="text-align: center;">Belum ada sekolah terdaftar.</td></tr>`;
+    tableBody.innerHTML = AppStateAdmin.schools.map(school => `<tr><td>${school.nama_sekolah}</td><td><button class="btn btn-sm btn-danger" onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah}')">Hapus</button></td></tr>`).join('') || `<tr><td colspan="2" style="text-align: center;">Belum ada sekolah terdaftar.</td></tr>`;
 }
 function renderUsersTable() {
     const tableBody = document.getElementById('usersTableBody');
@@ -90,17 +79,7 @@ function renderUsersTable() {
         const schoolId = user.raw_user_meta_data?.sekolah_id;
         const linkedSchool = AppStateAdmin.schools.find(s => s.id === schoolId);
         const schoolName = linkedSchool ? linkedSchool.nama_sekolah : '<span style="color: #e74c3c;">Belum Tertaut</span>';
-        
-        return `
-            <tr>
-                <td>${user.email}</td>
-                <td>${schoolName}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary" onclick="handleChangeUserSchool('${user.id}', '${user.email}')">Ubah</button>
-                    <button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>
-                </td>
-            </tr>
-        `;
+        return `<tr><td>${user.email}</td><td>${schoolName}</td><td><button class="btn btn-sm btn-secondary" onclick="handleChangeUserSchool('${user.id}', '${user.email}')">Ubah</button><button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button></td></tr>`;
     }).join('') || `<tr><td colspan="3" style="text-align: center;">Belum ada pengguna terdaftar.</td></tr>`;
 }
 function populateSchoolDropdown() {
@@ -115,8 +94,9 @@ function populateSchoolDropdown() {
     });
 }
 // ====================================================================
-// TAHAP 4: EVENT HANDLERS (DENGAN PERBAIKAN)
+// TAHAP 4: EVENT HANDLERS
 // ====================================================================
+
 function setupEventListeners() {
     document.getElementById('formTambahSekolah')?.addEventListener('submit', handleCreateSchoolSubmit);
     document.getElementById('formPengguna')?.addEventListener('submit', handleCreateUserSubmit);
@@ -131,13 +111,10 @@ async function handleCreateSchoolSubmit(event) {
     event.preventDefault();
     const schoolName = document.getElementById('schoolNameInput').value;
     if (!schoolName) return;
-
     showLoading(true);
     const { error } = await supabase.from('sekolah').insert({ nama_sekolah: schoolName });
     showLoading(false);
-
     if (error) return showStatusMessage(`Gagal membuat sekolah: ${error.message}`, 'error');
-    
     showStatusMessage(`Sekolah "${schoolName}" berhasil dibuat.`, 'success');
     event.target.reset();
     await loadAdminData();
@@ -148,28 +125,16 @@ async function handleCreateUserSubmit(event) {
     const email = document.getElementById('userEmail').value;
     const password = document.getElementById('userPassword').value;
     const schoolId = document.getElementById('userSchoolLink').value;
-
-    if (!email || !password || !schoolId) {
-        return showStatusMessage('Harap isi semua field: Email, Password, dan Sekolah.', 'error');
-    }
-    if (password.length < 6) {
-        return showStatusMessage('Password minimal 6 karakter.', 'error');
-    }
+    if (!email || !password || !schoolId) return showStatusMessage('Harap isi semua field.', 'error');
+    if (password.length < 6) return showStatusMessage('Password minimal 6 karakter.', 'error');
 
     showLoading(true);
-    const { data, error } = await supabase.functions.invoke('quick-task', {
-        body: {
-            action: 'createUser',
-            payload: { email, password, schoolId }
-        }
-    });
+    const { data, error } = await supabase.functions.invoke('quick-task', { body: { action: 'createUser', payload: { email, password, schoolId } } });
     showLoading(false);
-
     if (error) {
         const errorMessage = data?.error || error.message;
         return showStatusMessage(`Gagal membuat pengguna: ${errorMessage}`, 'error');
     }
-    
     showStatusMessage(`Pengguna ${email} berhasil dibuat dan ditautkan.`, 'success');
     event.target.reset();
     await loadAdminData();
@@ -181,14 +146,10 @@ async function handleChangeUserSchool(userId, userEmail) {
     if (!choice) return;
     
     const choiceIndex = parseInt(choice, 10) - 1;
-    if (isNaN(choiceIndex) || !AppStateAdmin.schools[choiceIndex]) {
-        return alert('Pilihan tidak valid.');
-    }
+    if (isNaN(choiceIndex) || !AppStateAdmin.schools[choiceIndex]) return alert('Pilihan tidak valid.');
     
     const selectedSchool = AppStateAdmin.schools[choiceIndex];
-    if (!confirm(`Anda yakin ingin menautkan ${userEmail} ke sekolah "${selectedSchool.nama_sekolah}"?`)) {
-        return;
-    }
+    if (!confirm(`Anda yakin ingin menautkan ${userEmail} ke sekolah "${selectedSchool.nama_sekolah}"?`)) return;
 
     showLoading(true);
 
@@ -205,15 +166,20 @@ async function handleChangeUserSchool(userId, userEmail) {
             }
         }
         
-        const cleanMetaData = {
-            is_super_admin: currentMetaData.is_super_admin
-        };
+        const cleanMetaData = { is_super_admin: currentMetaData.is_super_admin };
         cleanMetaData.sekolah_id = selectedSchool.id;
 
+        // ==================================================================
+        // PERBAIKAN FINAL DAN DEFINITIF ADA DI SINI
+        // ==================================================================
+        // Kita mengirim objek JavaScript secara langsung.
+        // Supabase-js akan menanganinya dengan benar ketika fungsi SQL
+        // mengharapkan tipe data JSONB.
         const { error: setError } = await supabase.rpc('admin_set_user_metadata', {
             target_user_id: userId,
-            new_metadata: JSON.stringify(cleanMetaData)
+            new_metadata: cleanMetaData 
         });
+        // ==================================================================
         
         if (setError) throw setError;
         
@@ -226,23 +192,20 @@ async function handleChangeUserSchool(userId, userEmail) {
         showStatusMessage(`Terjadi error: ${error.message}`, 'error');
     }
 }
-// ... FUNGSI LAINNYA TETAP SAMA (handleDeleteSchool, handleDeleteUser, showLoading, showStatusMessage) ...
+
+// ... FUNGSI LAINNYA TETAP SAMA ...
 async function handleDeleteSchool(schoolId, schoolName) {
-    if (!confirm(`PERINGATAN:\nMenghapus sekolah "${schoolName}" akan menghapus SEMUA data terkait (siswa, presensi, disiplin) secara permanen.\n\nLanjutkan?`)) {
-        return;
-    }
+    if (!confirm(`PERINGATAN:\nMenghapus sekolah "${schoolName}" akan menghapus SEMUA data terkait secara permanen.\n\nLanjutkan?`)) return;
     showLoading(true);
     const { error } = await supabase.from('sekolah').delete().eq('id', schoolId);
     showLoading(false);
-
     if (error) return showStatusMessage(`Gagal menghapus sekolah: ${error.message}`, 'error');
-    
     showStatusMessage(`Sekolah "${schoolName}" berhasil dihapus.`, 'success');
     await loadAdminData();
 }
 async function handleDeleteUser(userId, userEmail) {
     if (!confirm(`Anda yakin ingin menghapus pengguna ${userEmail} secara permanen?`)) return;
-    alert("Fungsionalitas hapus pengguna belum diimplementasikan di Edge Function.");
+    alert("Fungsionalitas hapus pengguna belum diimplementasikan.");
 }
 function showLoading(isLoading) {
     document.getElementById('loadingIndicator').style.display = isLoading ? 'flex' : 'none';
@@ -250,14 +213,14 @@ function showLoading(isLoading) {
 function showStatusMessage(message, type = 'info', duration = 5000) {
     const statusEl = document.getElementById('statusMessage');
     if (!statusEl) return alert(`${type.toUpperCase()}: ${message}`);
-    
     statusEl.textContent = message;
     statusEl.className = `status-message ${type}`;
     statusEl.style.display = 'block';
     window.scrollTo(0, 0);
     setTimeout(() => { statusEl.style.display = 'none'; }, duration);
 }
+
 // ====================================================================
-// TAHAP 5: ENTRY POINT
+// ENTRY POINT
 // ====================================================================
 document.addEventListener('DOMContentLoaded', checkSuperAdminAccess);
