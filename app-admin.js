@@ -1,24 +1,25 @@
 /**
  * =================================================================
- * SCRIPT PANEL SUPER ADMIN - (VERSI FINAL STABIL)
+ * SCRIPT PANEL SUPER ADMIN - (VERSI FINAL DEFINITIF DAN PALING KUAT)
  * =================================================================
- * @version 5.1 - Hybrid Initialization
+ * @version 5.2 - Ultra-Defensive & Cleaned
  * @author Gemini AI Expert for User
  *
- * Catatan Arsitektur:
- * - Menggunakan tabel `public.pengguna` untuk otorisasi (menentukan peran).
- * - Menggunakan `user_metadata` untuk RLS bypass (menghindari rekursi).
- * - Menggunakan pendekatan hybrid untuk inisialisasi halaman, memastikan
- *   sesi dimuat dengan andal tanpa 'Akses Ditolak' palsu atau data
- *   yang gagal dimuat.
- * - Logika manajemen pengguna (ubah sekolah, buat pengguna) sudah stabil.
+ * Catatan Perbaikan:
+ * - Menggunakan pendekatan inisialisasi hybrid yang stabil untuk
+ *   menghindari 'Akses Ditolak' palsu dan masalah data tidak dimuat.
+ * - [ULTRA-DEFENSIVE FIX] Saat memeriksa peran pengguna, kode sekarang
+ *   membersihkan string (menghapus spasi) dan mengubahnya menjadi
+ *   huruf kecil sebelum membandingkan, membuatnya anti-rapuh
+ *   terhadap kesalahan data minor.
+ * - Semua fungsi lain sudah stabil berdasarkan arsitektur tabel 'pengguna'.
  */
 
 // ====================================================================
 // KONFIGURASI GLOBAL
 // ====================================================================
 const SUPABASE_URL = 'https://qjlyqwyuotobnzllelta.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM৮NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqbHlxd3l1b3RvYm56bGxlbHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NDk2NTAsImV4cCI6MjA2OTQyNTY1MH0.Bm3NUiQ6VtKuTwCDFOR-d7O2uodVXc6MgvRSPnAwkSE';
 
 const { createClient } = window.supabase;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -37,13 +38,13 @@ let isInitialized = false;
 
 // Fungsi inti yang akan menjalankan pemeriksaan dan memuat aplikasi
 async function runInitialization(session) {
-    if (isInitialized) return; // Mencegah eksekusi ganda
+    if (isInitialized) return;
     if (!session) {
         handleAccessDenied('Sesi tidak valid. Silakan login kembali.');
         return;
     }
 
-    isInitialized = true; // Tandai bahwa proses telah dimulai
+    isInitialized = true;
     
     const { data: userProfile, error: profileError } = await supabase
         .from('pengguna')
@@ -51,12 +52,20 @@ async function runInitialization(session) {
         .eq('id', session.user.id)
         .single();
 
-    if (profileError || userProfile?.role !== 'super_admin') {
+    // ==================================================================
+    // PERBAIKAN UTAMA DAN PALING DEFENSIF ADA DI SINI
+    // ==================================================================
+    // Bersihkan data 'role' sebelum membandingkan untuk menghindari masalah
+    // spasi ekstra atau perbedaan huruf besar/kecil.
+    const userRole = userProfile?.role?.trim().toLowerCase();
+
+    if (profileError || userRole !== 'super_admin') {
         handleAccessDenied('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
         return;
     }
+    // ==================================================================
 
-    // Jika semua pemeriksaan lolos, lanjutkan memuat aplikasi
+    // Jika semua pemeriksaan berhasil, muat sisa aplikasi.
     document.getElementById('welcomeMessage').textContent = `Admin: ${session.user.email}`;
     setupEventListeners();
     await loadAdminData();
@@ -67,7 +76,7 @@ function handleAccessDenied(message) {
     window.location.replace('index.html');
 }
 
-// "Pendengar" yang akan berjalan jika sesi dimuat secara asinkron
+// "Pendengar" yang akan berjalan jika sesi dimuat secara asinkron.
 supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
         runInitialization(session);
@@ -77,13 +86,12 @@ supabase.auth.onAuthStateChange((event, session) => {
     }
 });
 
-// Panggilan langsung untuk mencoba memuat sesi secepat mungkin
+// Panggilan langsung untuk mencoba memuat sesi secepat mungkin.
 async function tryInitialLoad() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         runInitialization(session);
     }
-    // Jika tidak ada sesi, kita biarkan onAuthStateChange yang menangani
 }
 
 async function loadAdminData() {
