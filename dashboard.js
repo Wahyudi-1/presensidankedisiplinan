@@ -1,6 +1,6 @@
 // File: dashboard.js
 // Tujuan: Menangani semua logika dan interaksi khusus untuk halaman dashboard pengguna.
-// Versi: LENGKAP
+// Versi: DIPERBAIKI DAN LENGKAP
 
 // Impor dependensi dari modul lain
 import { supabase } from './config.js';
@@ -24,63 +24,57 @@ let qrScannerPulang = null;
 // ====================================================================
 
 /**
- * Memulai dan menampilkan antarmuka pemindai QR code.
+ * Memulai dan menampilkan antarmuka pemindai QR code menggunakan Html5QrcodeScanner.
  * @param {('datang'|'pulang')} type - Jenis pemindaian.
  */
 function startQrScanner(type) {
+    let scannerInstance = type === 'datang' ? qrScannerDatang : qrScannerPulang;
+    if (scannerInstance) return; 
+
     const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
     
-    stopQrScanner(type);
-
     const onScanSuccess = (decodedText, decodedResult) => {
         let currentScanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
-        if (currentScanner && typeof currentScanner.clear === 'function') {
-            currentScanner.clear().catch(err => console.error("Gagal membersihkan scanner:", err));
+        if (currentScanner) {
+            currentScanner.pause(true); 
         }
         processQrScan(decodedText, type);
         setTimeout(() => {
-            const section = document.getElementById(type === 'datang' ? 'datangSection' : 'pulangSection');
-            if (section && section.style.display !== 'none') {
-                 startQrScanner(type);
-                 if(resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code Siswa";
+            if (currentScanner) {
+                currentScanner.resume(); 
+                if (resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code Siswa";
             }
         }, 3000);
     };
-
-    const onScanFailure = (error) => { /* Abaikan error minor */ };
     
-    let scanner = new Html5Qrcode(elementId);
-    
-    if (type === 'datang') qrScannerDatang = scanner;
-    else qrScannerPulang = scanner;
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    scannerInstance = new Html5QrcodeScanner(elementId, config, false);
+    scannerInstance.render(onScanSuccess, (error) => { /* Abaikan error */ });
 
-    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanFailure)
-    .catch(err => {
-        console.error("Gagal memulai QR scanner:", err);
-        if(resultEl) resultEl.textContent = "Gagal memulai kamera. Pastikan Anda memberikan izin.";
-    });
+    if (type === 'datang') {
+        qrScannerDatang = scannerInstance;
+    } else {
+        qrScannerPulang = scannerInstance;
+    }
 }
 
 /**
- * Menghentikan pemindai QR code yang sedang berjalan.
+ * Menghentikan dan membersihkan pemindai QR code yang sedang berjalan.
  * @param {('datang'|'pulang')} type - Jenis pemindaian yang akan dihentikan.
  */
 function stopQrScanner(type) {
     let scanner = type === 'datang' ? qrScannerDatang : qrScannerPulang;
-    if (scanner && scanner.isScanning) {
-        scanner.stop().then(() => {
-            const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
-            const scannerElement = document.getElementById(elementId);
-            if(scannerElement) scannerElement.innerHTML = "";
-        }).catch(err => {
-            if (!err.message.toLowerCase().includes("not scanning")) {
-                 console.error(`Gagal menghentikan scanner ${type}:`, err);
-            }
+    if (scanner) {
+        scanner.clear().catch(error => {
+            console.error(`Gagal membersihkan scanner ${type}:`, error);
         });
+        if (type === 'datang') {
+            qrScannerDatang = null;
+        } else {
+            qrScannerPulang = null;
+        }
     }
-    if (type === 'datang') qrScannerDatang = null;
-    else qrScannerPulang = null;
 }
 
 /**
@@ -94,6 +88,7 @@ async function processQrScan(nisn, type) {
         .from('siswa')
         .select('nama')
         .eq('nisn', nisn)
+        .eq('sekolah_id', AppState.userSekolahId) // Keamanan tambahan
         .single();
         
     if (siswaError || !siswa) {
@@ -209,6 +204,7 @@ async function loadAndRenderDailyLog(type) {
     const { data, error } = await supabase
         .from('presensi')
         .select('waktu_datang, waktu_pulang, siswa (nisn, nama)')
+        .eq('sekolah_id', AppState.userSekolahId) // KRUSIAL: Filter berdasarkan sekolah
         .gte('waktu_datang', today.toISOString())
         .lt('waktu_datang', tomorrow.toISOString())
         .order('waktu_datang', { ascending: false });
@@ -222,6 +218,7 @@ async function loadAndRenderDailyLog(type) {
     tableBody.innerHTML = data.length === 0
         ? `<tr><td colspan="3" style="text-align: center;">Belum ada data presensi hari ini.</td></tr>`
         : data.map(row => {
+            if (!row.siswa) return ''; // Mencegah error jika siswa terhapus
             const waktuTampil = type === 'datang' ? row.waktu_datang : row.waktu_pulang;
             if (type === 'pulang' && !waktuTampil) return '';
             return `<tr><td>${new Date(waktuTampil).toLocaleTimeString('id-ID')}</td><td>${row.siswa.nisn}</td><td>${row.siswa.nama}</td></tr>`;
@@ -236,6 +233,7 @@ async function filterAndRenderRekap() {
     const { data, error } = await supabase
         .from('presensi')
         .select(`waktu_datang, waktu_pulang, status, siswa ( nisn, nama, whatsapp_ortu )`)
+        .eq('sekolah_id', AppState.userSekolahId) // KRUSIAL: Filter berdasarkan sekolah
         .gte('waktu_datang', startDateStr)
         .lte('waktu_datang', `${endDateStr}T23:59:59`);
     showLoading(false);
@@ -331,7 +329,12 @@ async function loadSiswaAndRenderTable(force = false) {
         return;
     }
     showLoading(true);
-    const { data, error } = await supabase.from('siswa').select('*').order('nama', { ascending: true });
+    const { data, error } = await supabase
+        .from('siswa')
+        .select('*')
+        .eq('sekolah_id', AppState.userSekolahId) // KRUSIAL: Filter berdasarkan sekolah
+        .order('nama', { ascending: true });
+        
     showLoading(false);
     if (error) return showStatusMessage(`Gagal memuat data siswa: ${error.message}`, 'error');
     AppState.siswa = data.map(s => ({
@@ -512,6 +515,7 @@ async function handleSearchRiwayatDisiplin() {
         .from('catatan_disiplin')
         .select('*')
         .eq('nisn_siswa', nisn)
+        .eq('sekolah_id', AppState.userSekolahId) // KRUSIAL: Filter berdasarkan sekolah
         .order('created_at', { ascending: false });
     showLoading(false);
     if (error) return showStatusMessage(`Gagal mencari riwayat: ${error.message}`, 'error');
@@ -530,6 +534,108 @@ function renderRiwayatDisiplinTable(riwayatArray) {
         <td data-label="Deskripsi">${r.deskripsi}</td>
         <td data-label="Poin">${r.poin}</td>
     </tr>`).join('');
+}
+
+// ====================================================================
+// FUNGSI IMPOR CSV (DIADAPTASI DARI APLIKASI PERTAMA)
+// ====================================================================
+
+/**
+ * Menangani pemilihan file CSV untuk impor data siswa.
+ * @param {Event} event - Event 'change' dari input file.
+ */
+async function handleSiswaFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    showLoading(true);
+    Papa.parse(file, {
+        header: true, skipEmptyLines: true,
+        complete: async function(results) {
+            if (!results.data || results.data.length === 0) {
+                showLoading(false);
+                return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
+            }
+            const dataToInsert = results.data
+                .filter(row => {
+                    const nisn = row.NISN || row.Nisn || row.nisn;
+                    return nisn && nisn.toString().trim() !== ''; 
+                })
+                .map(row => ({
+                    nisn: row.NISN || row.Nisn || row.nisn,
+                    nama: row.Nama || row.nama,
+                    kelas: row.Kelas || row.kelas,
+                    whatsapp_ortu: row['Whatsapp Ortu'] || row.WhatsappOrtu || row.whatsapp_ortu || null,
+                    sekolah_id: AppState.userSekolahId
+                }));
+            
+            if (dataToInsert.length === 0) {
+                showLoading(false);
+                return showStatusMessage('Tidak ada data siswa yang valid untuk diimpor.', 'info');
+            }
+
+            const { error } = await supabase
+                .from('siswa')
+                .upsert(dataToInsert, { onConflict: 'nisn' });
+            
+            showLoading(false);
+            
+            if (error) {
+                return showStatusMessage(`Gagal Impor: ${error.message}`, 'error');
+            }
+            
+            showStatusMessage(`${dataToInsert.length} data siswa berhasil diimpor/diperbarui!`, 'success');
+            await loadSiswaAndRenderTable(true);
+        },
+        error: (err) => {
+            showLoading(false);
+            showStatusMessage(`Gagal membaca file CSV: ${err.message}`, 'error');
+        }
+    });
+    event.target.value = '';
+}
+
+/**
+ * Menangani pemilihan file CSV untuk impor master data pelanggaran.
+ * @param {Event} event - Event 'change' dari input file.
+ */
+async function handlePelanggaranFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    showLoading(true);
+    Papa.parse(file, {
+        header: true, skipEmptyLines: true,
+        complete: async function(results) {
+            if (!results.data || results.data.length === 0) {
+                showLoading(false);
+                return showStatusMessage('File CSV kosong atau formatnya salah.', 'error');
+            }
+
+            const { error: deleteError } = await supabase.from('pelanggaran').delete().neq('id', 0);
+            if (deleteError) {
+                showLoading(false);
+                return showStatusMessage(`Gagal membersihkan master pelanggaran lama: ${deleteError.message}`, 'error');
+            }
+
+            const dataToInsert = results.data.map(row => ({
+                tingkat: row.Tingkat, 
+                deskripsi: row.Deskripsi || row.DeskripsiPelanggaran, 
+                poin: row.Poin
+            }));
+
+            const { error: insertError } = await supabase.from('pelanggaran').insert(dataToInsert);
+            showLoading(false);
+
+            if (insertError) return showStatusMessage(`Gagal impor: ${insertError.message}`, 'error');
+            
+            showStatusMessage(`${dataToInsert.length} data pelanggaran berhasil diimpor! Master lama telah diganti.`, 'success');
+            await loadPelanggaranData();
+        },
+        error: (err) => {
+            showLoading(false);
+            showStatusMessage(`Gagal membaca file CSV: ${err.message}`, 'error');
+        }
+    });
+    event.target.value = '';
 }
 
 
@@ -574,7 +680,6 @@ export async function initDashboardPage() {
     await loadSiswaAndRenderTable();
     await loadPelanggaranData();
     
-    // Secara otomatis klik tab pertama untuk menampilkan konten.
     document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
 }
 
@@ -630,3 +735,12 @@ function setupDashboardListeners() {
     document.getElementById('formDisiplin')?.addEventListener('submit', handleSubmitDisiplin);
     document.getElementById('searchDisiplinButton')?.addEventListener('click', handleSearchRiwayatDisiplin);
 }
+
+// ====================================================================
+// MEMBUAT FUNGSI DAPAT DIAKSES SECARA GLOBAL OLEH HTML
+// ====================================================================
+// Fungsi-fungsi ini perlu 'diekspos' agar atribut onclick di HTML dapat menemukannya.
+window.generateQRHandler = generateQRHandler;
+window.editSiswaHandler = editSiswaHandler;
+window.deleteSiswaHandler = deleteSiswaHandler;
+window.sendWhatsAppHandler = sendWhatsAppHandler;
