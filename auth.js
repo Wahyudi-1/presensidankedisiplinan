@@ -1,31 +1,26 @@
 // File: auth.js
 // Tujuan: Menangani semua logika yang berkaitan dengan autentikasi,
 //         termasuk login, logout, lupa password, dan manajemen sesi.
-// Versi: Diperbaiki dan Disempurnakan
+// Versi: Diperbaiki dengan Ekspor yang Benar
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
 
 /**
  * Memeriksa sesi pengguna saat ini dan mengarahkan mereka ke halaman yang sesuai.
- * Mencegah pengguna yang belum login mengakses area terproteksi, dan sebaliknya.
- * Mengarahkan pengguna ke panel yang benar berdasarkan perannya (Super Admin vs. Pengguna Biasa).
+ * Diekspor agar bisa digunakan oleh modul dashboard dan admin.
  */
-async function checkAuthenticationAndSetup() {
+export async function checkAuthenticationAndSetup() {
     const isPasswordRecovery = window.location.hash.includes('type=recovery');
     const { data: { session } } = await supabase.auth.getSession();
     const currentPath = window.location.pathname;
 
-    // Jika tidak ada sesi dan pengguna mencoba mengakses halaman terproteksi, kembalikan ke login.
     if (!session && (currentPath.includes('dashboard.html') || currentPath.includes('superadmin.html'))) {
         window.location.replace('index.html');
         return;
     }
 
-    // Jika ada sesi dan pengguna berada di halaman login (dan bukan dalam proses recovery password),
-    // arahkan ke halaman yang benar berdasarkan perannya.
     if (session && (currentPath.includes('index.html') || currentPath.endsWith('/')) && !isPasswordRecovery) {
-        // Cek RLS-level role dari tabel 'pengguna' untuk keamanan tambahan
         const { data: userProfile } = await supabase
             .from('pengguna')
             .select('role')
@@ -42,7 +37,6 @@ async function checkAuthenticationAndSetup() {
         return;
     }
 
-    // Jika ada sesi, tampilkan pesan selamat datang di halaman manapun.
     if (session) {
         const welcomeEl = document.getElementById('welcomeMessage');
         if (welcomeEl) {
@@ -52,10 +46,10 @@ async function checkAuthenticationAndSetup() {
 }
 
 /**
- * Menyiapkan listener untuk event perubahan status autentikasi,
- * khususnya untuk menangani alur pemulihan password.
+ * Menyiapkan listener untuk event perubahan status autentikasi.
+ * Diekspor agar bisa digunakan oleh modul dashboard dan admin.
  */
-function setupAuthListener() {
+export function setupAuthListener() {
     supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
             const loginBox = document.querySelector('.login-box');
@@ -84,9 +78,8 @@ function setupAuthListener() {
                 showStatusMessage('Password berhasil diperbarui! Silakan login dengan password baru Anda.', 'success');
 
                 setTimeout(() => {
-                    // Penyempurnaan: Hapus hash dari URL setelah berhasil
                     window.location.hash = ''; 
-                    window.location.reload(); // Muat ulang halaman untuk kembali ke state login
+                    window.location.reload();
                 }, 3000);
             };
         }
@@ -95,7 +88,6 @@ function setupAuthListener() {
 
 /**
  * Menangani proses login saat form di halaman login disubmit.
- * Fungsi ini tidak di-export karena dipanggil oleh event listener internal.
  */
 async function handleLogin() {
     const usernameEl = document.getElementById('username');
@@ -115,13 +107,11 @@ async function handleLogin() {
         return showStatusMessage(`Login Gagal: ${error.message}`, 'error');
     }
 
-    // Setelah login berhasil, panggil kembali checkAuthenticationAndSetup untuk pengalihan
-    // yang benar berdasarkan peran. Ini lebih andal.
     await checkAuthenticationAndSetup();
 }
 
 /**
- * Menangani proses logout. Di-export agar bisa dipanggil dari modul lain (dashboard/admin).
+ * Menangani proses logout.
  */
 export async function handleLogout() {
     if (confirm('Apakah Anda yakin ingin logout?')) {
@@ -138,7 +128,6 @@ export async function handleLogout() {
 
 /**
  * Menangani permintaan reset password.
- * Fungsi ini tidak di-export karena dipanggil oleh event listener internal.
  */
 async function handleForgotPassword() {
     const emailEl = document.getElementById('username');
@@ -152,7 +141,6 @@ async function handleForgotPassword() {
     }
 
     showLoading(true);
-    // Menggunakan URL dasar tanpa hash untuk link reset
     const redirectTo = window.location.origin + window.location.pathname;
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     showLoading(false);
@@ -165,12 +153,10 @@ async function handleForgotPassword() {
 
 /**
  * Inisialisasi semua fungsi dan event listener yang diperlukan untuk Halaman Login.
- * Di-export untuk dipanggil oleh main.js
  */
 export async function initLoginPage() {
     setupPasswordToggle();
     
-    // Secara proaktif cek apakah URL berisi hash untuk recovery password saat halaman dimuat
     if (window.location.hash.includes('type=recovery')) {
         const loginBox = document.querySelector('.login-box');
         const resetContainer = document.getElementById('resetPasswordContainer');
@@ -183,18 +169,14 @@ export async function initLoginPage() {
     setupAuthListener();
     await checkAuthenticationAndSetup();
     
-    // ====================== PERBAIKAN UTAMA DI SINI ======================
-    // Secara programatik, cari form login dan lampirkan event listener 'submit'.
-    // Ini menggantikan kebutuhan `onsubmit` di HTML dan menyelesaikan masalah scope.
     const loginForm = document.querySelector('.login-form-container form');
     if(loginForm) {
         loginForm.addEventListener('submit', (event) => {
-            event.preventDefault(); // Mencegah form mengirim data secara tradisional
-            handleLogin(); // Memanggil fungsi login dari dalam modul
+            event.preventDefault();
+            handleLogin();
         });
     }
 
-    // Lampirkan event listener untuk link "Lupa Password?"
     document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
         e.preventDefault();
         handleForgotPassword();
