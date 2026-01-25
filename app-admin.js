@@ -1,6 +1,6 @@
 // File: app-admin.js
-// Tujuan: Logika untuk Panel Super Admin dengan keamanan tingkat lanjut.
-// Versi: 2.0 (Modular & Safe)
+// Tujuan: Logika untuk Panel Super Admin.
+// Versi: 2.2 (Fix: Removed dependency on created_at column)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage } from './utils.js';
@@ -14,7 +14,7 @@ const AppStateAdmin = {
 };
 
 // ====================================================================
-// 1. INISIALISASI & OTENTIKASI (HYBRID APPROACH)
+// 1. INISIALISASI & OTENTIKASI
 // ====================================================================
 
 // Fungsi utama untuk memulai halaman admin
@@ -30,15 +30,15 @@ async function initAdminPage(session) {
         // Cek Role di Database
         const { data: userProfile, error } = await supabase
             .from('pengguna')
-            .select('role, email')
+            .select('role')
             .eq('id', session.user.id)
             .single();
 
-        // Normalisasi role (hapus spasi, lowercase) untuk keamanan
+        // Normalisasi role
         const userRole = userProfile?.role?.trim().toLowerCase();
 
         if (error || userRole !== 'super_admin') {
-            console.warn("Akses ilegal terdeteksi: User bukan Super Admin.");
+            console.warn("Akses ilegal terdeteksi.");
             alert('AKSES DITOLAK! Halaman ini hanya untuk Super Administrator.');
             await supabase.auth.signOut();
             window.location.replace('index.html');
@@ -63,7 +63,7 @@ async function initAdminPage(session) {
     }
 }
 
-// Listener Perubahan Auth (Menangani refresh halaman atau logout)
+// Listener Perubahan Auth
 supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         initAdminPage(session);
@@ -81,12 +81,13 @@ async function loadAdminData() {
     showLoading(true);
     try {
         // Request paralel untuk performa lebih cepat
+        // PERBAIKAN: Mengurutkan user berdasarkan 'email', bukan 'created_at'
         const [schoolsReq, usersReq] = await Promise.all([
             supabase.from('sekolah').select('*').order('nama_sekolah', { ascending: true }),
             supabase.from('pengguna').select(`
                 id, email, sekolah_id, role, 
                 sekolah ( nama_sekolah )
-            `).order('created_at', { ascending: false })
+            `).order('email', { ascending: true }) 
         ]);
 
         if (schoolsReq.error) throw new Error(`Gagal memuat sekolah: ${schoolsReq.error.message}`);
@@ -118,10 +119,10 @@ function renderSchoolsTable() {
     tableBody.innerHTML = AppStateAdmin.schools.map(school => `
         <tr>
             <td><strong>${school.nama_sekolah}</strong></td>
-            <td>
+            <td style="text-align: right;">
                 <button class="btn btn-sm btn-danger" 
                     onclick="handleDeleteSchool('${school.id}', '${school.nama_sekolah.replace(/'/g, "\\'")}')">
-                    Hapus Sekolah
+                    Hapus
                 </button>
             </td>
         </tr>
@@ -143,21 +144,24 @@ function renderUsersTable() {
             : `<span style="color: var(--danger-color); font-style:italic;">Belum Tertaut</span>`;
             
         const isSuperAdmin = user.role === 'super_admin';
-        const deleteButton = isSuperAdmin 
-            ? `<span class="badge" style="background:#ccc; padding:2px 5px; border-radius:4px; font-size:0.8em;">Super Admin</span>` 
-            : `<button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>`;
         
-        const editButton = isSuperAdmin
-            ? ``
-            : `<button class="btn btn-sm btn-secondary" onclick="handleChangeUserSchool('${user.id}', '${user.email}')">Ubah Sekolah</button>`;
+        // Tombol aksi
+        let actionButtons = '';
+        if (isSuperAdmin) {
+            actionButtons = `<span class="badge" style="background:#ccc; padding:2px 5px; border-radius:4px; font-size:0.8em;">Super Admin</span>`;
+        } else {
+            actionButtons = `
+                <button class="btn btn-sm btn-secondary" onclick="handleChangeUserSchool('${user.id}', '${user.email}')">Ubah</button>
+                <button class="btn btn-sm btn-danger" onclick="handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>
+            `;
+        }
 
         return `
             <tr>
                 <td>${user.email}</td>
                 <td>${schoolName}</td>
-                <td style="display:flex; gap:5px;">
-                    ${editButton}
-                    ${deleteButton}
+                <td style="text-align: right; white-space: nowrap;">
+                    ${actionButtons}
                 </td>
             </tr>
         `;
@@ -214,7 +218,7 @@ function setupEventListeners() {
         if (password.length < 6) return showStatusMessage('Password minimal 6 karakter.', 'error');
 
         showLoading(true);
-        // Memanggil Edge Function 'quick-task' untuk bypass RLS saat create user
+        // Memanggil Edge Function 'quick-task'
         const { data, error } = await supabase.functions.invoke('quick-task', {
             body: { 
                 action: 'createUser', 
@@ -243,13 +247,12 @@ function setupEventListeners() {
     });
 }
 
-// Fungsi Global Window (agar bisa diakses dari onlick HTML)
+// Fungsi Global Window
 window.handleDeleteSchool = async function(schoolId, schoolName) {
-    // KEAMANAN: Meminta user mengetik nama sekolah
-    const verification = prompt(`PERINGATAN KERAS:\nMenghapus sekolah akan menghapus SEMUA data terkait (Siswa, Presensi, Pelanggaran).\nData yang dihapus TIDAK BISA DIKEMBALIKAN.\n\nKetik nama sekolah "${schoolName}" dengan persis untuk konfirmasi:`);
+    const verification = prompt(`PERINGATAN KERAS:\nMenghapus sekolah akan menghapus SEMUA data terkait (Siswa, Presensi, Pelanggaran).\n\nKetik nama sekolah "${schoolName}" untuk konfirmasi:`);
     
     if (verification !== schoolName) {
-        if (verification !== null) alert("Penghapusan dibatalkan. Nama sekolah tidak cocok.");
+        if (verification !== null) alert("Penghapusan dibatalkan. Nama tidak cocok.");
         return;
     }
 
@@ -260,16 +263,15 @@ window.handleDeleteSchool = async function(schoolId, schoolName) {
     if (error) {
         showStatusMessage(`Gagal menghapus: ${error.message}`, 'error');
     } else {
-        showStatusMessage(`Sekolah "${schoolName}" telah dihapus permanen.`, 'success');
+        showStatusMessage(`Sekolah "${schoolName}" telah dihapus.`, 'success');
         await loadAdminData();
     }
 };
 
 window.handleDeleteUser = async function(userId, userEmail) {
-    if (!confirm(`Yakin ingin menghapus pengguna ${userEmail}? Pengguna tidak akan bisa login lagi.`)) return;
+    if (!confirm(`Yakin ingin menghapus pengguna ${userEmail}?`)) return;
 
     showLoading(true);
-    // Memanggil Edge Function untuk menghapus user dari Authentication
     const { data, error } = await supabase.functions.invoke('quick-task', {
         body: { 
             action: 'deleteUser', 
@@ -287,7 +289,6 @@ window.handleDeleteUser = async function(userId, userEmail) {
 };
 
 window.handleChangeUserSchool = async function(userId, userEmail) {
-    // Membuat prompt sederhana menggunakan list sekolah
     const schoolList = AppStateAdmin.schools
         .map((s, i) => `${i + 1}. ${s.nama_sekolah}`)
         .join('\n');
