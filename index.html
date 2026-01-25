@@ -6,7 +6,7 @@
     <!-- ========================================================== -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="Portal Login Sistem Kedisiplinan dan Presensi Siswa Kak Rose">
+    <meta name="description" content="Portal Login Sistem Kedisiplinan dan Presensi Siswa">
     <meta name="author" content="Kak Rose Team">
     <title>Login - Sistem Kedisiplinan Siswa</title>
 
@@ -25,7 +25,7 @@
     <!-- Favicon -->
     <link rel="icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
-    <meta name="apple-mobile-web-app-title" content="Kak Rose">
+    <meta name="apple-mobile-web-app-title" content="Presensi Digital">
 </head>
 
 <body class="login-page-v2">
@@ -36,7 +36,6 @@
     <main class="login-box">
         
         <!-- KOLOM KIRI: ILUSTRASI -->
-        <!-- Disembunyikan secara otomatis di Mobile via CSS -->
         <div class="login-illustration">
             <div class="illustration-content">
                <img 
@@ -57,11 +56,30 @@
         <div class="login-form-container">
             <div class="login-form-content">
                 
-                <!-- Header Mobile (Logo Kecil) -->
+                <!-- ====================================================== -->
+                <!-- ==== PERBAIKAN DI SINI: HEADER DINAMIS              ==== -->
+                <!-- ====================================================== -->
                 <div style="text-align: center; margin-bottom: 30px;">
-                    <h2 class="logo" style="color: var(--primary-color); font-size: 2rem;">Selamat Datang</h2>
-                    <p style="color: var(--text-light);">Silakan masuk ke akun sekolah Anda.</p>
+                    <!-- WADAH UNTUK LOGO DINAMIS -->
+                    <img 
+                        id="schoolLogo" 
+                        src="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png" 
+                        alt="Logo Sekolah" 
+                        style="max-height: 80px; margin-bottom: 1rem; object-fit: contain;">
+                    
+                    <!-- WADAH UNTUK NAMA SEKOLAH DINAMIS -->
+                    <h2 
+                        id="schoolName" 
+                        class="logo" 
+                        style="color: var(--primary-color); font-size: 1.5rem; line-height: 1.2;">
+                        Selamat Datang
+                    </h2>
+                    
+                    <p style="color: var(--text-light);">Silakan masuk ke akun Anda.</p>
                 </div>
+                <!-- ====================================================== -->
+                <!-- ==== AKHIR PERBAIKAN                                ==== -->
+                <!-- ====================================================== -->
                 
                 <form id="loginForm" novalidate>
                     
@@ -118,7 +136,6 @@
     <!-- ========================================================== -->
     <!-- KONTAINER RESET PASSWORD (DEFAULT: HIDDEN)                 -->
     <!-- ========================================================== -->
-    <!-- Ditampilkan otomatis oleh auth.js jika mendeteksi link reset -->
     <div id="resetPasswordContainer" class="login-box" style="display: none; height: auto; min-height: 400px;">
         <div class="login-form-container" style="grid-column: 1 / -1; width: 100%;">
             <div class="login-form-content" style="text-align: center;">
