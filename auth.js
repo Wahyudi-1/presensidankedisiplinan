@@ -1,33 +1,83 @@
 // File: auth.js
-// Tujuan: Menangani logika autentikasi, manajemen sesi, dan routing role-based.
-// Versi: 2.1 (Optimized & Secure)
+// Tujuan: Menangani autentikasi, sesi, dan halaman login dinamis.
+// Versi: 2.2 (Dynamic Login Page Ready)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
 
 // ====================================================================
-// 1. LOGIKA UTAMA: CEK SESI & REDIRECT
+// 0. HALAMAN LOGIN DINAMIS (FUNGSI BARU)
 // ====================================================================
 
 /**
- * Memeriksa sesi pengguna dan mengarahkan ke halaman yang sesuai berdasarkan Role.
- * Fungsi ini dijalankan setiap kali halaman dimuat.
+ * Membaca slug sekolah dari URL, mengambil data dari Supabase,
+ * dan mengubah tampilan halaman login (logo, nama sekolah).
  */
+async function setupDynamicLoginPage() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const schoolSlug = params.get('sekolah');
+
+        // Jika tidak ada slug di URL, tampilkan halaman login default.
+        if (!schoolSlug) {
+            console.log("Menampilkan halaman login generik.");
+            return;
+        }
+
+        console.log(`Mencari sekolah dengan slug: ${schoolSlug}`);
+        
+        // Ambil data sekolah dari Supabase berdasarkan slug
+        const { data: school, error } = await supabase
+            .from('sekolah')
+            .select('nama_sekolah, logo_url')
+            .eq('slug', schoolSlug)
+            .single();
+
+        if (error || !school) {
+            console.warn(`Sekolah dengan slug "${schoolSlug}" tidak ditemukan.`, error);
+            // Tampilkan pesan error jika slug salah
+            const nameEl = document.getElementById('schoolName');
+            if(nameEl) nameEl.textContent = "Halaman Login Tidak Ditemukan";
+            return;
+        }
+
+        // Ambil elemen HTML yang akan diubah
+        const logoEl = document.getElementById('schoolLogo');
+        const nameEl = document.getElementById('schoolName');
+
+        // Ganti konten halaman sesuai data dari database
+        if (logoEl && school.logo_url) {
+            logoEl.src = school.logo_url;
+            logoEl.alt = `Logo ${school.nama_sekolah}`;
+        }
+        if (nameEl) {
+            nameEl.textContent = school.nama_sekolah;
+        }
+        
+        // Ganti judul tab browser
+        document.title = `Login - ${school.nama_sekolah}`;
+
+    } catch (e) {
+        console.error("Gagal setup halaman login dinamis:", e);
+    }
+}
+
+
+// ====================================================================
+// 1. LOGIKA UTAMA: CEK SESI & REDIRECT
+// ====================================================================
 export async function checkAuthenticationAndSetup() {
-    // Cek apakah ini mode reset password (ada hash #type=recovery di URL)
     if (window.location.hash && window.location.hash.includes('type=recovery')) {
-        return; // Biarkan logika setupAuthListener menangani ini
+        return; 
     }
 
     const { data: { session } } = await supabase.auth.getSession();
     const path = window.location.pathname;
     
-    // Normalisasi path agar bekerja di localhost maupun production folder
     const isLoginPage = path.includes('index.html') || path === '/' || path.endsWith('/');
     const isDashboard = path.includes('dashboard.html');
     const isAdminPage = path.includes('superadmin.html');
 
-    // KASUS 1: Tidak ada sesi (Belum Login)
     if (!session) {
         if (!isLoginPage) {
             window.location.replace('index.html');
@@ -35,10 +85,8 @@ export async function checkAuthenticationAndSetup() {
         return;
     }
 
-    // KASUS 2: Sudah Login, Cek Role Pengguna
     if (session) {
         try {
-            // Ambil role dari tabel pengguna
             const { data: userProfile, error } = await supabase
                 .from('pengguna')
                 .select('role')
@@ -46,28 +94,18 @@ export async function checkAuthenticationAndSetup() {
                 .single();
 
             if (error) throw error;
-
-            // Bersihkan string role untuk keamanan
+            
             const userRole = userProfile?.role?.trim().toLowerCase() || 'user';
 
-            // Logika Redirect Cerdas (Mencegah Loop)
             if (userRole === 'super_admin') {
-                if (!isAdminPage) {
-                    window.location.replace('superadmin.html');
-                } else {
-                    updateWelcomeMessage(session.user.email);
-                }
+                if (!isAdminPage) window.location.replace('superadmin.html');
+                else updateWelcomeMessage(session.user.email);
             } else {
-                // User biasa (Sekolah/Guru)
-                if (!isDashboard) {
-                    window.location.replace('dashboard.html');
-                } else {
-                    updateWelcomeMessage(session.user.email);
-                }
+                if (!isDashboard) window.location.replace('dashboard.html');
+                else updateWelcomeMessage(session.user.email);
             }
         } catch (err) {
             console.error("Gagal memverifikasi role:", err);
-            // Jika gagal cek role, logout paksa demi keamanan
             await supabase.auth.signOut();
             window.location.replace('index.html');
         }
@@ -87,20 +125,14 @@ function updateWelcomeMessage(email) {
 
 export function setupAuthListener() {
     supabase.auth.onAuthStateChange(async (event, session) => {
-        
-        // Menangani Reset Password (saat user klik link dari email)
         if (event === 'PASSWORD_RECOVERY') {
             const loginBox = document.querySelector('.login-box');
             const resetContainer = document.getElementById('resetPasswordContainer');
-            
-            // Sembunyikan login, tampilkan form reset
             if (loginBox) loginBox.style.display = 'none';
             if (resetContainer) {
-                resetContainer.style.display = 'grid'; // Sesuaikan dengan CSS grid Anda
-                // Scroll ke form reset
+                resetContainer.style.display = 'grid';
                 resetContainer.scrollIntoView({ behavior: 'smooth' });
             }
-
             const resetForm = document.getElementById('resetPasswordForm');
             if (resetForm) {
                 resetForm.onsubmit = handlePasswordResetSubmit;
@@ -112,22 +144,16 @@ export function setupAuthListener() {
 async function handlePasswordResetSubmit(e) {
     e.preventDefault();
     const newPassword = document.getElementById('newPassword').value;
-
     if (!newPassword || newPassword.length < 6) {
         return showStatusMessage('Password baru minimal 6 karakter.', 'error');
     }
-
     showLoading(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     showLoading(false);
-
     if (error) {
         return showStatusMessage(`Gagal update password: ${error.message}`, 'error');
     }
-
     showStatusMessage('Password berhasil diperbarui! Mengalihkan...', 'success');
-    
-    // Bersihkan URL dan reload untuk masuk sebagai user normal
     setTimeout(() => {
         window.location.hash = '';
         window.location.reload();
@@ -141,34 +167,20 @@ async function handlePasswordResetSubmit(e) {
 async function handleLogin() {
     const emailEl = document.getElementById('username');
     const passwordEl = document.getElementById('password');
-    
     const email = emailEl.value.trim();
     const password = passwordEl.value;
-
     if (!email || !password) {
         return showStatusMessage("Harap masukkan Email dan Password.", 'error');
     }
-
     showLoading(true);
-    
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-    });
-
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     showLoading(false);
-
     if (error) {
         let msg = error.message;
-        // Terjemahkan pesan error umum agar lebih ramah pengguna
         if (msg.includes("Invalid login credentials")) msg = "Email atau password salah.";
         if (msg.includes("Email not confirmed")) msg = "Email belum diverifikasi.";
-        
         return showStatusMessage(msg, 'error');
     }
-
-    // Login sukses, fungsi checkAuthenticationAndSetup akan menangani redirect
-    // karena halaman akan mendeteksi session baru.
     await checkAuthenticationAndSetup();
 }
 
@@ -177,46 +189,30 @@ export async function handleLogout() {
         showLoading(true);
         const { error } = await supabase.auth.signOut();
         showLoading(false);
-        
-        if (error) {
-            alert('Gagal logout: ' + error.message);
-        } else {
-            window.location.replace('index.html');
-        }
+        if (error) alert('Gagal logout: ' + error.message);
+        else window.location.replace('index.html');
     }
 }
 
 async function handleForgotPassword() {
     const emailEl = document.getElementById('username');
     const email = emailEl.value.trim();
-
     if (!email) {
-        // Fokuskan ke input email dan beri highlight
         emailEl.focus();
         emailEl.style.borderColor = 'var(--primary-color)';
-        return showStatusMessage('Masukkan alamat email Anda di kolom Email, lalu klik "Lupa Password?" lagi.', 'info');
+        return showStatusMessage('Masukkan alamat email Anda, lalu klik "Lupa Password?".', 'info');
     }
-
     if (!confirm(`Kirim link reset password ke email: ${email}?`)) {
         return;
     }
-
     showLoading(true);
-    
-    // Redirect URL harus mengarah kembali ke index.html di domain Anda
     const redirectTo = window.location.origin + window.location.pathname;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { 
-        redirectTo: redirectTo 
-    });
-    
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     showLoading(false);
-
     if (error) {
         return showStatusMessage(`Gagal mengirim email: ${error.message}`, 'error');
     }
-    
-    showStatusMessage('Cek inbox email (dan folder Spam) Anda untuk link reset password.', 'success');
+    showStatusMessage('Cek inbox email (dan folder Spam) Anda untuk link reset.', 'success');
 }
 
 // ====================================================================
@@ -224,21 +220,18 @@ async function handleForgotPassword() {
 // ====================================================================
 
 export async function initLoginPage() {
+    // Jalankan fungsi halaman dinamis paling pertama!
+    await setupDynamicLoginPage();
+
     setupPasswordToggle();
     setupAuthListener();
-    
-    // Cek apakah user sudah login, jika ya, lempar ke dashboard/admin
     await checkAuthenticationAndSetup();
     
     // Setup Form Listener
-    const loginForm = document.querySelector('form');
-    // Pastikan kita mengambil form yang benar (bukan form reset password)
-    // Biasanya di halaman login, form pertama adalah form login
-    if(loginForm && loginForm.closest('.login-form-content')) {
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
         loginForm.addEventListener('submit', (event) => {
             event.preventDefault();
-            // Cek apakah ini form reset password atau login
-            if (event.target.id === 'resetPasswordForm') return; 
             handleLogin();
         });
     }
