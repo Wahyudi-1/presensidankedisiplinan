@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <!-- ========================================================== -->
-    <!-- METADATA & KONFIGURASI HALAMAN                             -->
+    <!-- METADATA & PAGE CONFIGURATION                              -->
     <!-- ========================================================== -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -45,14 +45,14 @@
     </header>
 
     <!-- ========================================================== -->
-    <!-- KONTEN UTAMA                                               -->
+    <!-- MAIN CONTENT                                               -->
     <!-- ========================================================== -->
     <main class="container">
         
-        <!-- Notifikasi Global -->
+        <!-- Global Notification Area -->
         <div id="statusMessage" class="status-message" style="display: none;"></div>
         
-        <!-- Loading Spinner Global -->
+        <!-- Global Loading Spinner -->
         <div id="loadingIndicator" class="loading-overlay" style="display: none;">
             <div class="spinner"></div>
             <p style="margin-top: 15px; color: var(--primary-color);">Memproses Data...</p>
@@ -61,15 +61,19 @@
         <h2 style="margin-bottom: 1.5rem; color: var(--text-color);">Manajemen Sistem Global</h2>
 
         <!-- ====================================================== -->
-        <!-- Bagian 1: MANAJEMEN SEKOLAH                            -->
+        <!-- Section 1: SCHOOL MANAGEMENT                           -->
         <!-- ====================================================== -->
         <div class="card">
             <div class="card-header">1. Manajemen Sekolah (Tenant)</div>
             
-            <!-- ==== PERBAIKAN DI SINI: Form Tambah Sekolah dengan Slug & Logo ==== -->
+            <!-- ==== IMPROVEMENT HERE: Add/Edit School Form ==== -->
             <form id="formTambahSekolah" class="form-grid" style="border-bottom: 1px dashed var(--border-color); padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+                
+                <!-- Hidden input to store the ID during edit mode -->
+                <input type="hidden" id="schoolIdInput">
+                
                 <div class="form-group">
-                    <label for="schoolNameInput">Nama Sekolah Baru</label>
+                    <label for="schoolNameInput">Nama Sekolah</label>
                     <input type="text" id="schoolNameInput" placeholder="Contoh: SMA Negeri 1 Maju Jaya" required>
                 </div>
                 
@@ -83,23 +87,26 @@
                     <input type="url" id="schoolLogoInput" placeholder="https://.../logo.png">
                 </div>
 
-                <div class="form-group form-group-full" style="text-align: right;">
-                    <button type="submit" class="btn btn-primary">+ Tambah Sekolah</button>
+                <div class="form-group form-group-full" style="text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+                    <!-- Cancel button, appears during edit mode -->
+                    <button type="button" id="cancelEditButton" class="btn btn-secondary" style="display: none;">Batal</button>
+                    
+                    <!-- Main submit button -->
+                    <button type="submit" id="submitSchoolButton" class="btn btn-primary">+ Tambah Sekolah</button>
                 </div>
             </form>
-            <!-- ==== AKHIR PERBAIKAN ==== -->
+            <!-- ==== END OF IMPROVEMENT ==== -->
 
-            <!-- Tabel Daftar Sekolah -->
+            <!-- School List Table -->
             <h4>Daftar Sekolah Terdaftar</h4>
             <div class="table-container">
                 <table>
-                    <!-- ==== PERBAIKAN DI SINI: Header Tabel Sekolah ==== -->
                     <thead>
                         <tr>
                             <th>Nama Sekolah</th>
                             <th>Slug</th>
                             <th>Logo</th>
-                            <th style="width: 150px; text-align: right;">Aksi</th>
+                            <th style="width: 200px; text-align: right;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="schoolsTableBody">
@@ -110,12 +117,12 @@
         </div>
 
         <!-- ====================================================== -->
-        <!-- Bagian 2: MANAJEMEN PENGGUNA (ADMIN SEKOLAH)           -->
+        <!-- Section 2: USER MANAGEMENT                           -->
         <!-- ====================================================== -->
         <div class="card" style="margin-top: 2rem;">
             <div class="card-header">2. Manajemen Pengguna (Admin Sekolah)</div>
             
-            <!-- Form Buat User -->
+            <!-- Create User Form -->
             <div style="background-color: var(--secondary-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
                 <form id="formPengguna" class="form-grid">
                     <div class="form-group">
@@ -143,7 +150,7 @@
                 </form>
             </div>
 
-            <!-- Tabel Daftar User -->
+            <!-- User List Table -->
             <h4>Daftar Pengguna Sistem</h4>
             <div class="table-container">
                 <table>
@@ -170,7 +177,7 @@
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- Main Logic (Router akan memanggil app-admin.js) -->
+    <!-- Main Logic (Router will call app-admin.js) -->
     <script type="module" src="main.js"></script>
 
 </body>
