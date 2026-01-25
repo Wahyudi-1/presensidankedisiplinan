@@ -5,33 +5,27 @@
     <!-- METADATA & KONFIGURASI HALAMAN                             -->
     <!-- ========================================================== -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Sistem Kedisiplinan Siswa Kak Rose</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Portal Login Sistem Kedisiplinan dan Presensi Siswa Kak Rose">
+    <meta name="author" content="Kak Rose Team">
+    <title>Login - Sistem Kedisiplinan Siswa</title>
 
     <!-- ========================================================== -->
-    <!-- STYLESHEETS & FONTS                                        -->
+    <!-- ASSETS (FONTS & STYLE)                                     -->
     <!-- ========================================================== -->
     
-    <!-- 1. Google Fonts (Poppins) -->
+    <!-- Google Fonts (Poppins) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- 2. Main Stylesheet (style.css) -->
+    <!-- Main Stylesheet -->
     <link rel="stylesheet" href="style.css">
 
-
-    <!-- GANTI KODE FAVICON LAMA ANDA DENGAN BLOK KODE SEDERHANA INI -->
-
-    <!-- Menggunakan satu logo untuk semua keperluan ikon -->
+    <!-- Favicon -->
     <link rel="icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
-    
-    <!-- Nama aplikasi untuk iOS -->
-    <meta name="apple-mobile-web-app-title" content="Kedisiplinan">
-        
-    <!-- Akhir dari blok kode favicon -->
-        
+    <meta name="apple-mobile-web-app-title" content="Kak Rose">
 </head>
 
 <body class="login-page-v2">
@@ -39,104 +33,139 @@
     <!-- ========================================================== -->
     <!-- MAIN LOGIN CONTAINER                                       -->
     <!-- ========================================================== -->
-    <div class="login-box">
+    <main class="login-box">
         
-        <!-- Kolom Kiri: Ilustrasi & Pesan Selamat Datang -->
+        <!-- KOLOM KIRI: ILUSTRASI -->
+        <!-- Disembunyikan secara otomatis di Mobile via CSS -->
         <div class="login-illustration">
             <div class="illustration-content">
-               <!-- Memuat gambar ikon dari repositori GitHub -->
-                <img 
+               <img 
                     class="responsive-icon"
                     src="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png" 
-                    alt="Logo Kak Rose"
-                    >
-                <h3>Sistem Kedisiplinan Siswa</h3>
-                <h3>Kak Rose</h3>
-                <p>Otomatis, cepat, dan akurat dengan teknologi QR Code.</p>
+                    alt="Logo Aplikasi Kak Rose"
+                    style="max-width: 180px; margin-bottom: 20px;"
+                >
+                <h3 style="font-weight: 600; color: var(--primary-dark);">Sistem Presensi Digital</h3>
+                <h3 style="font-weight: 700; color: var(--primary-color);">Kak Rose</h3>
+                <p style="margin-top: 15px; font-size: 0.95rem; color: #555;">
+                    Platform manajemen kedisiplinan siswa yang Cepat, Akurat, dan Terintegrasi WhatsApp.
+                </p>
             </div>
         </div>
         
-        <!-- Kolom Kanan: Form Login -->
+        <!-- KOLOM KANAN: FORM LOGIN -->
         <div class="login-form-container">
             <div class="login-form-content">
                 
-                <h2 class="logo">Kak Rose</h2>
-                <p style="color: var(--text-light); margin-bottom: 25px;">Silakan masuk untuk melanjutkan.</p>
+                <!-- Header Mobile (Logo Kecil) -->
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h2 class="logo" style="color: var(--primary-color); font-size: 2rem;">Selamat Datang</h2>
+                    <p style="color: var(--text-light);">Silakan masuk ke akun sekolah Anda.</p>
+                </div>
                 
-                <form>
+                <form id="loginForm" novalidate>
                     
                     <div class="form-group">
-                        <label for="username">Email</label>
-                        <input type="email" id="username" placeholder="Masukkan alamat email Anda" required autocomplete="email">
+                        <label for="username">Alamat Email</label>
+                        <input 
+                            type="email" 
+                            id="username" 
+                            placeholder="admin@sekolah.com" 
+                            required 
+                            autocomplete="email"
+                            autofocus
+                        >
                     </div>
                     
                     <div class="form-group">
-                        <label for="password">Password</label>
+                        <label for="password">Kata Sandi</label>
                         <div class="password-wrapper">
-                            <input type="password" id="password" placeholder="Masukkan password Anda" required autocomplete="current-password">
-                            <span id="togglePassword" class="toggle-password-icon"></span>
+                            <input 
+                                type="password" 
+                                id="password" 
+                                placeholder="Masukkan password..." 
+                                required 
+                                autocomplete="current-password"
+                            >
+                            <!-- Ikon mata akan di-inject oleh utils.js -->
+                            <span id="togglePassword" class="toggle-password-icon" title="Lihat Password"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Tombol Aksi -->
+                    <div class="form-group" style="margin-top: 2rem;">
+                        <button type="submit" id="loginButton" class="btn btn-primary btn-block">
+                            Masuk Aplikasi
+                        </button>
+                    </div>
+
+                    <div class="form-group" style="text-align: center; margin-top: 1.5rem;">
+                        <a href="#" id="forgotPasswordLink" style="color: var(--text-light); text-decoration: none; font-size: 0.9em; transition: color 0.3s;">
+                            Lupa Password?
+                        </a>
+                    </div>
+
+                </form>
+                
+                <!-- Area Pesan Error/Sukses -->
+                <div id="statusMessage" class="status-message" style="display: none; margin-top: 20px;"></div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ========================================================== -->
+    <!-- KONTAINER RESET PASSWORD (DEFAULT: HIDDEN)                 -->
+    <!-- ========================================================== -->
+    <!-- Ditampilkan otomatis oleh auth.js jika mendeteksi link reset -->
+    <div id="resetPasswordContainer" class="login-box" style="display: none; height: auto; min-height: 400px;">
+        <div class="login-form-container" style="grid-column: 1 / -1; width: 100%;">
+            <div class="login-form-content" style="text-align: center;">
+                
+                <h2 class="logo" style="color: var(--primary-color);">Atur Password Baru</h2>
+                <p style="color: var(--text-light); margin-bottom: 25px;">Masukkan kata sandi baru untuk akun Anda.</p>
+                
+                <form id="resetPasswordForm">
+                    <div class="form-group" style="text-align: left;">
+                        <label for="newPassword">Password Baru</label>
+                        <div class="password-wrapper">
+                            <input 
+                                type="password" 
+                                id="newPassword" 
+                                placeholder="Minimal 6 karakter..." 
+                                required 
+                                minlength="6"
+                                autocomplete="new-password"
+                            >
                         </div>
                     </div>
                     
                     <div class="form-group" style="margin-top: 2rem;">
-                        <button type="submit" id="loginButton" class="btn btn-primary btn-block">Login</button>
-                    </div>
-
-                    <!-- ========== PERUBAHAN DI SINI ========== -->
-                    <div class="form-group" style="text-align: center; margin-top: 1rem;">
-                        <a href="#" id="forgotPasswordLink" style="color: var(--primary-color); text-decoration: none; font-size: 0.9em;">Lupa Password?</a>
-                    </div>
-                    <!-- ========== AKHIR PERUBAHAN ========== -->
-
-                </form>
-                
-                <div id="statusMessage" class="status-message" style="display: none; margin-top: 15px;"></div>
-            </div>
-        </div>
-
-    </div> <!-- End of .login-box -->
-
-    <!-- ========================================================== -->
-    <!-- RESET PASSWORD CONTAINER (SEMBUNYI SECARA DEFAULT)         -->
-    <!-- ========================================================== -->
-    <div id="resetPasswordContainer" class="login-box" style="display: none;">
-        <div class="login-form-container" style="grid-column: 1 / -1;">
-            <div class="login-form-content">
-                
-                <h2 class="logo">Atur Password Baru</h2>
-                <p style="color: var(--text-light); margin-bottom: 25px;">Silakan masukkan password baru Anda.</p>
-                
-                <form id="resetPasswordForm">
-                    <div class="form-group">
-                        <label for="newPassword">Password Baru</label>
-                        <input type="password" id="newPassword" placeholder="Masukkan password baru (min. 6 karakter)" required>
-                    </div>
-                    
-                    <div class="form-group" style="margin-top: 2rem;">
-                        <button type="submit" class="btn btn-primary btn-block">Simpan Password Baru</button>
+                        <button type="submit" class="btn btn-primary btn-block">Simpan Perubahan</button>
                     </div>
                 </form>
+
             </div>
         </div>
     </div>
-    <!-- Akhir dari Reset Password Container -->
-
 
     <!-- ========================================================== -->
-    <!-- ELEMEN GLOBAL (LOADING OVERLAY)                            -->
+    <!-- LOADING SPINNER GLOBAL                                     -->
     <!-- ========================================================== -->
     <div id="loadingIndicator" class="loading-overlay" style="display: none;">
         <div class="spinner"></div>
+        <p style="margin-top: 15px; font-weight: 500; color: var(--primary-color);">Memproses...</p>
     </div>
 
     <!-- ========================================================== -->
-    <!-- JAVASCRIPT LIBRARIES & SCRIPT                              -->
+    <!-- SCRIPT & LIBRARY                                           -->
     <!-- ========================================================== -->
     
-    <!-- Library untuk Supabase -->
+    <!-- Library Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- Script utama aplikasi -->
+    <!-- Script Utama (Type Module agar import/export jalan) -->
     <script type="module" src="main.js"></script>
 
 </body>
