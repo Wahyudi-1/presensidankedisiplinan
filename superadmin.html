@@ -1,110 +1,163 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <!-- ========================================================== -->
+    <!-- METADATA & KONFIGURASI HALAMAN                             -->
+    <!-- ========================================================== -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel Super Admin</title>
-    <!-- Menggunakan CSS yang sama dengan dashboard utama untuk konsistensi -->
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Panel Super Admin - Manajemen Sekolah & Pengguna">
+    <title>Panel Super Admin - Kak Rose</title>
+
+    <!-- ========================================================== -->
+    <!-- ASSETS (FONTS & STYLE)                                     -->
+    <!-- ========================================================== -->
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Main Stylesheet (Shared with Dashboard) -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Favicon -->
+    <link rel="icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/Wahyudi-1/presensidankedisiplinan/main/Logo.png">
 </head>
+
 <body>
+
+    <!-- ========================================================== -->
+    <!-- HEADER                                                     -->
+    <!-- ========================================================== -->
     <header>
-        <div class="logo">Panel Super Admin</div>
+        <div class="logo">
+            <span style="font-weight: 300; color: var(--text-light); font-size: 0.9em;">Panel</span>
+            Super Admin
+        </div>
         <nav>
-            <span id="welcomeMessage" style="margin-right: 20px; color: var(--text-light);">Memuat...</span>
-            <button id="logoutButton" class="btn btn-danger">Logout</button>
+            <span id="welcomeMessage" style="margin-right: 20px; color: var(--text-light); font-size: 0.9em;">Memuat akses...</span>
+            <button id="logoutButton" class="btn btn-sm btn-danger">
+                Logout
+            </button>
         </nav>
     </header>
 
+    <!-- ========================================================== -->
+    <!-- KONTEN UTAMA                                               -->
+    <!-- ========================================================== -->
     <main class="container">
-        <!-- ====================================================== -->
-        <!-- Elemen Global untuk Notifikasi dan Loading             -->
-        <!-- ====================================================== -->
+        
+        <!-- Notifikasi Global -->
         <div id="statusMessage" class="status-message" style="display: none;"></div>
-        <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
+        
+        <!-- Loading Spinner Global -->
+        <div id="loadingIndicator" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p style="margin-top: 15px; color: var(--primary-color);">Memproses Data...</p>
+        </div>
 
-        <h1>Manajemen Sistem Keseluruhan</h1>
+        <h2 style="margin-bottom: 1.5rem; color: var(--text-color);">Manajemen Sistem Global</h2>
 
         <!-- ====================================================== -->
-        <!-- Bagian 1: Manajemen Sekolah                            -->
+        <!-- Bagian 1: MANAJEMEN SEKOLAH                            -->
         <!-- ====================================================== -->
         <div class="card">
-            <div class="card-header">Manajemen Sekolah</div>
-            <form id="formTambahSekolah" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
+            <div class="card-header">1. Manajemen Sekolah (Tenant)</div>
+            
+            <!-- Form Tambah Sekolah -->
+            <form id="formTambahSekolah" class="form-container" style="border-bottom: 1px dashed var(--border-color); padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
                 <div class="form-group">
                     <label for="schoolNameInput">Nama Sekolah Baru</label>
-                    <input type="text" id="schoolNameInput" placeholder="Contoh: SMA Negeri 1 Impian" required>
-                </div>
-                <div class="form-actions" style="margin-top:0; align-self: end;">
-                    <button type="submit" class="btn btn-primary">Tambah Sekolah</button>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="schoolNameInput" placeholder="Contoh: SMA Negeri 1 Maju Jaya" required autocomplete="off">
+                        <button type="submit" class="btn btn-primary" style="white-space: nowrap;">+ Tambah</button>
+                    </div>
+                    <small style="color: var(--text-light);">Nama sekolah ini akan muncul di dashboard guru.</small>
                 </div>
             </form>
-            <h4 style="margin-top: 1.5rem;">Daftar Sekolah Terdaftar</h4>
+
+            <!-- Tabel Daftar Sekolah -->
+            <h4>Daftar Sekolah Terdaftar</h4>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
                             <th>Nama Sekolah</th>
-                            <th>Aksi</th>
+                            <th style="width: 150px; text-align: right;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="schoolsTableBody">
-                        <tr><td colspan="2" style="text-align: center;">Memuat data sekolah...</td></tr>
+                        <tr><td colspan="2" style="text-align: center; padding: 20px;">Memuat data sekolah...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
         <!-- ====================================================== -->
-        <!-- Bagian 2: Manajemen Pengguna                           -->
+        <!-- Bagian 2: MANAJEMEN PENGGUNA (ADMIN SEKOLAH)           -->
         <!-- ====================================================== -->
         <div class="card" style="margin-top: 2rem;">
-            <div class="card-header">Manajemen Pengguna (Guru / Admin Sekolah)</div>
-             <form id="formPengguna" class="form-container" style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
-                <div class="form-group">
-                    <label for="userEmail">Email Pengguna Baru</label>
-                    <input type="email" id="userEmail" placeholder="email@pengguna.com" required>
-                </div>
-                 <div class="form-group">
-                    <label for="userPassword">Password Awal</label>
-                    <input type="password" id="userPassword" placeholder="Min. 6 karakter" required>
-                </div>
-                <div class="form-group">
-                    <label for="userSchoolLink">Tautkan ke Sekolah</label>
-                    <select id="userSchoolLink" required>
-                        <option value="">-- Muat data sekolah... --</option>
-                    </select>
-                </div>
-                <div class="form-actions" style="margin-top:0; align-self: end;">
-                    <button type="submit" class="btn btn-primary">Buat & Tautkan Pengguna</button>
-                </div>
-            </form>
-            <h4 style="margin-top: 1.5rem;">Daftar Pengguna Sistem</h4>
+            <div class="card-header">2. Manajemen Pengguna (Admin Sekolah)</div>
+            
+            <!-- Form Buat User -->
+            <div style="background-color: var(--secondary-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                <form id="formPengguna" class="form-grid">
+                    <div class="form-group">
+                        <label for="userEmail">Email Pengguna Baru</label>
+                        <input type="email" id="userEmail" placeholder="email@sekolah.sch.id" required autocomplete="off">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userPassword">Password Awal</label>
+                        <input type="password" id="userPassword" placeholder="Min. 6 karakter" required minlength="6" autocomplete="new-password">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userSchoolLink">Tautkan ke Sekolah</label>
+                        <select id="userSchoolLink" required>
+                            <option value="">-- Sedang memuat daftar sekolah... --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-group-full" style="text-align: right;">
+                        <button type="submit" class="btn btn-success">
+                            + Buat & Tautkan Pengguna
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tabel Daftar User -->
+            <h4>Daftar Pengguna Sistem</h4>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>Email</th>
+                            <th>Email Pengguna</th>
                             <th>Sekolah Tertaut</th>
-                            <th>Aksi</th>
+                            <th style="text-align: right;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="usersTableBody">
-                        <tr><td colspan="3" style="text-align: center;">Memuat data pengguna...</td></tr>
+                        <tr><td colspan="3" style="text-align: center; padding: 20px;">Memuat data pengguna...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
+
     </main>
 
-    <!-- ====================================================== -->
-    <!-- JAVASCRIPT LIBRARIES & SCRIPT UTAMA                    -->
-    <!-- ====================================================== -->
+    <!-- ========================================================== -->
+    <!-- SCRIPT & LIBRARY                                           -->
+    <!-- ========================================================== -->
+    
+    <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app-admin.js"></script>
+
+    <!-- Main Logic (Router akan memanggil app-admin.js) -->
+    <script type="module" src="main.js"></script>
+
 </body>
 </html>
