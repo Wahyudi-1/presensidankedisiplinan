@@ -1,12 +1,12 @@
 // File: auth.js
 // Tujuan: Menangani autentikasi, sesi, dan halaman login dinamis.
-// Versi: 2.3 (RLS-Compatible & Robust Error Handling)
+// Versi: 2.2 (Dynamic Login Page Ready)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
 
 // ====================================================================
-// 0. HALAMAN LOGIN DINAMIS
+// 0. HALAMAN LOGIN DINAMIS (FUNGSI BARU)
 // ====================================================================
 
 /**
@@ -18,8 +18,14 @@ async function setupDynamicLoginPage() {
         const params = new URLSearchParams(window.location.search);
         const schoolSlug = params.get('sekolah');
 
-        if (!schoolSlug) return; // Tampilkan default jika tidak ada slug
+        // Jika tidak ada slug di URL, tampilkan halaman login default.
+        if (!schoolSlug) {
+            console.log("Menampilkan halaman login generik.");
+            return;
+        }
 
+        console.log(`Mencari sekolah dengan slug: ${schoolSlug}`);
+        
         // Ambil data sekolah dari Supabase berdasarkan slug
         const { data: school, error } = await supabase
             .from('sekolah')
@@ -28,15 +34,18 @@ async function setupDynamicLoginPage() {
             .single();
 
         if (error || !school) {
-            console.warn(`Sekolah dengan slug "${schoolSlug}" tidak ditemukan.`);
+            console.warn(`Sekolah dengan slug "${schoolSlug}" tidak ditemukan.`, error);
+            // Tampilkan pesan error jika slug salah
             const nameEl = document.getElementById('schoolName');
-            if(nameEl) nameEl.textContent = "Sekolah Tidak Ditemukan";
+            if(nameEl) nameEl.textContent = "Halaman Login Tidak Ditemukan";
             return;
         }
 
+        // Ambil elemen HTML yang akan diubah
         const logoEl = document.getElementById('schoolLogo');
         const nameEl = document.getElementById('schoolName');
 
+        // Ganti konten halaman sesuai data dari database
         if (logoEl && school.logo_url) {
             logoEl.src = school.logo_url;
             logoEl.alt = `Logo ${school.nama_sekolah}`;
@@ -45,6 +54,7 @@ async function setupDynamicLoginPage() {
             nameEl.textContent = school.nama_sekolah;
         }
         
+        // Ganti judul tab browser
         document.title = `Login - ${school.nama_sekolah}`;
 
     } catch (e) {
@@ -57,7 +67,6 @@ async function setupDynamicLoginPage() {
 // 1. LOGIKA UTAMA: CEK SESI & REDIRECT
 // ====================================================================
 export async function checkAuthenticationAndSetup() {
-    // Abaikan jika sedang dalam proses reset password
     if (window.location.hash && window.location.hash.includes('type=recovery')) {
         return; 
     }
@@ -65,12 +74,10 @@ export async function checkAuthenticationAndSetup() {
     const { data: { session } } = await supabase.auth.getSession();
     const path = window.location.pathname;
     
-    // Normalisasi path agar bekerja di localhost maupun hosting subfolder
     const isLoginPage = path.includes('index.html') || path === '/' || path.endsWith('/');
     const isDashboard = path.includes('dashboard.html');
     const isAdminPage = path.includes('superadmin.html');
 
-    // SKENARIO 1: Belum Login
     if (!session) {
         if (!isLoginPage) {
             window.location.replace('index.html');
@@ -78,50 +85,29 @@ export async function checkAuthenticationAndSetup() {
         return;
     }
 
-    // SKENARIO 2: Sudah Login (Session Ada)
     if (session) {
         try {
-            // Cek Profil Pengguna di Database
-            // Menggunakan .maybeSingle() agar tidak error fatal jika data kosong/terblokir RLS
             const { data: userProfile, error } = await supabase
                 .from('pengguna')
                 .select('role')
                 .eq('id', session.user.id)
-                .maybeSingle();
+                .single();
 
-            // Handle Error Database / RLS
-            if (error) {
-                console.error("Database Error (RLS mungkin memblokir):", error);
-                throw new Error("Gagal membaca profil. Pastikan Policy RLS aktif.");
-            }
-
-            // Handle Jika Data Tidak Ditemukan (User Auth ada, tapi Tabel Pengguna kosong)
-            if (!userProfile) {
-                console.error("Profil pengguna tidak ditemukan di tabel 'pengguna'.");
-                alert("Akun Anda terdaftar tapi profil data belum dibuat. Hubungi Admin.");
-                await supabase.auth.signOut();
-                window.location.replace('index.html');
-                return;
-            }
+            if (error) throw error;
             
-            // Logika Redirect Berdasarkan Role
-            const userRole = userProfile.role?.trim().toLowerCase() || 'user';
+            const userRole = userProfile?.role?.trim().toLowerCase() || 'user';
 
             if (userRole === 'super_admin') {
                 if (!isAdminPage) window.location.replace('superadmin.html');
                 else updateWelcomeMessage(session.user.email);
             } else {
-                // Role User Biasa (Admin Sekolah)
                 if (!isDashboard) window.location.replace('dashboard.html');
                 else updateWelcomeMessage(session.user.email);
             }
-
         } catch (err) {
-            console.error("Gagal memverifikasi sesi:", err);
-            // Logout paksa jika terjadi error fatal (untuk mencegah loop)
+            console.error("Gagal memverifikasi role:", err);
             await supabase.auth.signOut();
-            if (!isLoginPage) window.location.replace('index.html');
-            else showStatusMessage("Terjadi kesalahan sistem saat memuat profil.", 'error');
+            window.location.replace('index.html');
         }
     }
 }
@@ -183,27 +169,18 @@ async function handleLogin() {
     const passwordEl = document.getElementById('password');
     const email = emailEl.value.trim();
     const password = passwordEl.value;
-    
     if (!email || !password) {
         return showStatusMessage("Harap masukkan Email dan Password.", 'error');
     }
-    
     showLoading(true);
-    
-    // 1. Proses Login ke Auth Supabase
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     showLoading(false);
-    
     if (error) {
         let msg = error.message;
         if (msg.includes("Invalid login credentials")) msg = "Email atau password salah.";
         if (msg.includes("Email not confirmed")) msg = "Email belum diverifikasi.";
         return showStatusMessage(msg, 'error');
     }
-    
-    // 2. Jika sukses login, jalankan cek profil & redirect
-    // (Fungsi checkAuthenticationAndSetup akan menangani RLS check)
     await checkAuthenticationAndSetup();
 }
 
@@ -243,12 +220,14 @@ async function handleForgotPassword() {
 // ====================================================================
 
 export async function initLoginPage() {
+    // Jalankan fungsi halaman dinamis paling pertama!
     await setupDynamicLoginPage();
 
     setupPasswordToggle();
     setupAuthListener();
     await checkAuthenticationAndSetup();
     
+    // Setup Form Listener
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', (event) => {
