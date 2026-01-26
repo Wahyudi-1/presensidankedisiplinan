@@ -1,6 +1,6 @@
 // File: auth.js
 // Tujuan: Menangani autentikasi, sesi, dan halaman login dinamis.
-// Versi: 2.3 (RLS-Compatible & Robust Error Handling)
+// Versi: 2.4 (Fixed Reset Password URL & Robust Login)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
@@ -49,7 +49,7 @@ async function setupDynamicLoginPage() {
 
 
 // ====================================================================
-// 1. LOGIKA UTAMA: CEK SESI & REDIRECT (BAGIAN INI YANG DIPERBAIKI)
+// 1. LOGIKA UTAMA: CEK SESI & REDIRECT
 // ====================================================================
 export async function checkAuthenticationAndSetup() {
     if (window.location.hash && window.location.hash.includes('type=recovery')) {
@@ -74,17 +74,16 @@ export async function checkAuthenticationAndSetup() {
     // SKENARIO 2: Sudah Login
     if (session) {
         try {
-            // PENGGUNAAN .maybeSingle() AGAR LEBIH AMAN SAAT RLS AKTIF
+            // Menggunakan .maybeSingle() agar aman dari error fatal
             const { data: userProfile, error } = await supabase
                 .from('pengguna')
                 .select('role')
                 .eq('id', session.user.id)
                 .maybeSingle();
 
-            // Jika error RLS atau data kosong
             if (error) {
-                console.error("Database Error (RLS mungkin memblokir):", error);
-                throw new Error("Gagal membaca profil. Pastikan Policy RLS aktif.");
+                console.error("Database Error:", error);
+                throw new Error("Gagal membaca profil.");
             }
 
             if (!userProfile) {
@@ -190,7 +189,7 @@ async function handleLogin() {
         return showStatusMessage(msg, 'error');
     }
     
-    // 2. Cek Profil & Redirect (Akan memanggil fungsi checkAuthenticationAndSetup yang sudah diperbaiki)
+    // 2. Cek Profil & Redirect
     await checkAuthenticationAndSetup();
 }
 
@@ -216,8 +215,15 @@ async function handleForgotPassword() {
         return;
     }
     showLoading(true);
-    const redirectTo = window.location.origin + window.location.pathname;
+    
+    // --- PERBAIKAN URL RESET PASSWORD ---
+    // Menggunakan URL statis agar tidak mengarah ke localhost saat user
+    // melakukan reset password dari production/website asli.
+    const redirectTo = 'https://wahyudi-1.github.io/presensidankedisiplinan/index.html'; 
+    // ------------------------------------
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    
     showLoading(false);
     if (error) {
         return showStatusMessage(`Gagal mengirim email: ${error.message}`, 'error');
