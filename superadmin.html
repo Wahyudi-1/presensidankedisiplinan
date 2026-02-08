@@ -66,9 +66,7 @@
         <div class="card">
             <div class="card-header">1. Manajemen Sekolah (Tenant)</div>
             
-            <!-- ==== IMPROVEMENT HERE: Add/Edit School Form ==== -->
             <form id="formTambahSekolah" class="form-grid" style="border-bottom: 1px dashed var(--border-color); padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
-                
                 <!-- Hidden input to store the ID during edit mode -->
                 <input type="hidden" id="schoolIdInput">
                 
@@ -95,7 +93,6 @@
                     <button type="submit" id="submitSchoolButton" class="btn btn-primary">+ Tambah Sekolah</button>
                 </div>
             </form>
-            <!-- ==== END OF IMPROVEMENT ==== -->
 
             <!-- School List Table -->
             <h4>Daftar Sekolah Terdaftar</h4>
@@ -117,10 +114,10 @@
         </div>
 
         <!-- ====================================================== -->
-        <!-- Section 2: USER MANAGEMENT                           -->
+        <!-- Section 2: USER MANAGEMENT (UPDATED)                 -->
         <!-- ====================================================== -->
         <div class="card" style="margin-top: 2rem;">
-            <div class="card-header">2. Manajemen Pengguna (Admin Sekolah)</div>
+            <div class="card-header">2. Manajemen Pengguna (Admin & Wali Kelas)</div>
             
             <!-- Create User Form -->
             <div style="background-color: var(--secondary-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
@@ -142,6 +139,21 @@
                         </select>
                     </div>
 
+                    <!-- UPDATE: PILIHAN ROLE -->
+                    <div class="form-group">
+                        <label for="userRole">Peran (Role)</label>
+                        <select id="userRole" required onchange="toggleKelasInput()">
+                            <option value="admin_sekolah">Admin Sekolah (Operator)</option>
+                            <option value="wali_kelas">Wali Kelas</option>
+                        </select>
+                    </div>
+
+                    <!-- UPDATE: INPUT KELAS (HIDDEN BY DEFAULT) -->
+                    <div class="form-group" id="groupKelasInput" style="display: none;">
+                        <label for="userKelas">Kelas (Wajib untuk Wali Kelas)</label>
+                        <input type="text" id="userKelas" placeholder="Contoh: XII IPA 1 (Harus Sama dengan Database)">
+                    </div>
+
                     <div class="form-group form-group-full" style="text-align: right;">
                         <button type="submit" class="btn btn-success">
                             + Buat & Tautkan Pengguna
@@ -157,7 +169,7 @@
                     <thead>
                         <tr>
                             <th>Email Pengguna</th>
-                            <th>Sekolah Tertaut</th>
+                            <th>Sekolah & Role</th>
                             <th style="text-align: right;">Aksi</th>
                         </tr>
                     </thead>
@@ -174,10 +186,26 @@
     <!-- SCRIPT & LIBRARY                                           -->
     <!-- ========================================================== -->
     
+    <!-- Helper Script untuk Form Toggle -->
+    <script>
+        function toggleKelasInput() {
+            const role = document.getElementById('userRole').value;
+            const div = document.getElementById('groupKelasInput');
+            if(role === 'wali_kelas') {
+                div.style.display = 'block';
+                document.getElementById('userKelas').required = true;
+            } else {
+                div.style.display = 'none';
+                document.getElementById('userKelas').required = false;
+                document.getElementById('userKelas').value = '';
+            }
+        }
+    </script>
+
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- Main Logic (Router will call app-admin.js) -->
+    <!-- Main Logic -->
     <script type="module" src="main.js"></script>
 
 </body>
