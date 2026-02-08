@@ -1,7 +1,7 @@
 // File: main.js
 // Tujuan: Router sisi klien. Mengatur file JS mana yang harus dijalankan
 //         berdasarkan URL halaman HTML saat ini.
-// Versi: 2.1 (Added Wali Kelas Route)
+// Versi: 3.0 (Added Wali Kelas Route)
 
 // Event saat HTML selesai dimuat
 document.addEventListener('DOMContentLoaded', async () => {
