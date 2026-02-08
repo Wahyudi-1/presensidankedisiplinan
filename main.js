@@ -1,6 +1,7 @@
 // File: main.js
-// Tujuan: Router sisi klien. Mengatur file mana yang harus dijalankan
-//         berdasarkan URL halaman saat ini.
+// Tujuan: Router sisi klien. Mengatur file JS mana yang harus dijalankan
+//         berdasarkan URL halaman HTML saat ini.
+// Versi: 2.1 (Added Wali Kelas Route)
 
 // Event saat HTML selesai dimuat
 document.addEventListener('DOMContentLoaded', async () => {
@@ -13,6 +14,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
         // 2. Tentukan halaman mana yang sedang dibuka
+        
+        // --- ROUTE 1: DASHBOARD ADMIN SEKOLAH / OPERATOR ---
         if (path.includes('dashboard.html')) {
             console.log("🚀 Memuat Modul Dashboard...");
             // Dynamic Import: Hanya load dashboard.js jika di halaman dashboard
@@ -23,13 +26,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await currentModule.initDashboardPage();
             }
 
+        // --- ROUTE 2: PANEL SUPER ADMIN ---
         } else if (path.includes('superadmin.html')) {
             console.log("🛡️ Memuat Modul Super Admin...");
             // Dynamic Import: Hanya load app-admin.js jika di halaman admin
-            // Kode di app-admin.js biasanya auto-run via event listener,
-            // tapi kita import agar script-nya dieksekusi.
             await import('./app-admin.js');
 
+        // --- ROUTE 3: PANEL WALI KELAS (BARU) ---
+        } else if (path.includes('walikelas.html')) {
+            console.log("👨‍🏫 Memuat Modul Wali Kelas...");
+            // Dynamic Import: Hanya load walikelas.js jika di halaman wali kelas
+            currentModule = await import('./walikelas.js');
+            
+            // Jalankan fungsi inisialisasi dari walikelas.js
+            if (currentModule.initWaliKelasPage) {
+                await currentModule.initWaliKelasPage();
+            }
+
+        // --- ROUTE DEFAULT: HALAMAN LOGIN ---
         } else {
             // Default: Asumsikan Halaman Login (index.html atau root '/')
             console.log("🔐 Memuat Modul Login...");
