@@ -54,6 +54,8 @@
         <button data-section="rekapSection" class="btn btn-nav">Rekap Data</button>
         <button data-section="disiplinSection" class="btn btn-nav">Kedisiplinan</button>
         <button data-section="siswaSection" class="btn btn-nav">Database Siswa</button>
+        <!-- TOMBOL BARU UNTUK WALI KELAS -->
+        <button data-section="waliKelasSection" class="btn btn-nav">Manajemen Wali Kelas</button>
     </nav>
 
     <main class="container">
@@ -338,6 +340,65 @@
                 </div>
             </div>
         </div>
+
+        <!-- ====================================================== -->
+        <!-- Bagian 6: MANAJEMEN WALI KELAS (BARU)                  -->
+        <!-- ====================================================== -->
+        <div id="waliKelasSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">Manajemen Wali Kelas</div>
+                
+                <div class="alert-box" style="background: #e3f2fd; color: #0d47a1; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 15px;">
+                    <strong>ℹ️ Info:</strong> Di sini Anda dapat membuat akun login khusus untuk Wali Kelas. Wali Kelas hanya dapat melihat data siswa di kelas yang ditugaskan.
+                </div>
+
+                <!-- Form Tambah Wali Kelas -->
+                <div style="background-color: var(--secondary-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                    <h5 style="margin-bottom: 15px; color: var(--primary-color);">+ Tambah Akun Wali Kelas Baru</h5>
+                    <form id="formWaliKelas" class="form-grid">
+                        <div class="form-group">
+                            <label for="waliEmail">Email Login</label>
+                            <input type="email" id="waliEmail" placeholder="guru@sekolah.sch.id" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="waliPassword">Password</label>
+                            <input type="password" id="waliPassword" placeholder="Min. 6 karakter" required minlength="6">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="waliKelasAssigned">Kelas yang Dipegang</label>
+                            <input type="text" id="waliKelasAssigned" placeholder="Contoh: XII IPA 1" required>
+                            <small style="color: #c0392b; font-weight: 500;">PENTING: Penulisan harus SAMA PERSIS dengan data di Database Siswa.</small>
+                        </div>
+
+                        <div class="form-group form-group-full" style="text-align: right;">
+                            <button type="submit" class="btn btn-success">
+                                + Buat Akun Wali Kelas
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tabel Daftar Wali Kelas -->
+                <h4>Daftar Wali Kelas Terdaftar</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email Guru</th>
+                                <th>Kelas Assigned</th>
+                                <th style="text-align: right;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="waliKelasTableBody">
+                            <tr><td colspan="3" align="center" style="padding: 20px;">Memuat data wali kelas...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- ====================================================== -->
