@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Wali Kelas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo">
+            <span style="font-weight: 300;">Panel</span> Wali Kelas
+        </div>
+        <nav>
+            <span id="welcomeMessage" style="margin-right: 15px; font-size: 0.9rem;">...</span>
+            <button id="logoutButton" class="btn btn-sm btn-danger">Logout</button>
+        </nav>
+    </header>
+
+    <!-- INFO KELAS -->
+    <div style="background: #fff; padding: 15px; border-bottom: 1px solid #ddd; text-align: center;">
+        <h3 id="infoKelasTitle" style="color: var(--primary-color);">Memuat Info Kelas...</h3>
+    </div>
+
+    <!-- NAVIGASI TAB -->
+    <nav class="section-nav" style="justify-content: center;">
+        <button data-section="datangSection" class="btn btn-nav active">Monitoring Datang</button>
+        <button data-section="pulangSection" class="btn btn-nav">Monitoring Pulang</button>
+        <button data-section="rekapSection" class="btn btn-nav">Rekap Absensi</button>
+    </nav>
+
+    <main class="container">
+        <div id="statusMessage" class="status-message" style="display: none;"></div>
+        <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
+
+        <!-- 1. MONITORING DATANG -->
+        <div id="datangSection" class="content-section">
+            <div class="card">
+                <div class="card-header">Siswa Hadir Hari Ini (Datang)</div>
+                <button id="refreshDatang" class="btn btn-sm btn-secondary" style="margin-bottom: 10px;">↻ Refresh Data</button>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th><th>Status</th></tr></thead>
+                        <tbody id="tableBodyDatang"><tr><td colspan="4" align="center">Memuat...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. MONITORING PULANG -->
+        <div id="pulangSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">Siswa Sudah Pulang Hari Ini</div>
+                <button id="refreshPulang" class="btn btn-sm btn-secondary" style="margin-bottom: 10px;">↻ Refresh Data</button>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Waktu Pulang</th><th>NISN</th><th>Nama</th></tr></thead>
+                        <tbody id="tableBodyPulang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. REKAP -->
+        <div id="rekapSection" class="content-section" style="display: none;">
+            <div class="card">
+                <div class="card-header">Rekapitulasi Kelas</div>
+                <div class="form-grid" style="background:#f8f9fa; padding:15px; border-radius:8px;">
+                    <div class="form-group"><label>Tanggal</label><input type="date" id="tglRekap" class="form-control"></div>
+                    <div class="form-group"><button id="btnCariRekap" class="btn btn-primary" style="margin-top:28px;">Tampilkan</button></div>
+                </div>
+                <br>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Tanggal</th><th>Nama</th><th>Masuk</th><th>Pulang</th><th>Ket</th></tr></thead>
+                        <tbody id="tableBodyRekap"><tr><td colspan="5" align="center">Pilih tanggal...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
