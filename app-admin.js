@@ -1,6 +1,6 @@
 // File: app-admin.js
 // Purpose: Logic for the Super Admin Panel.
-// Version: 2.4 (School Edit Functionality Added)
+// Version: 3.1 (Added Support for Creating Admin Sekolah & Wali Kelas)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage } from './utils.js';
@@ -14,7 +14,7 @@ const AppStateAdmin = {
 
 // ====================================================================
 // 1. INITIALIZATION & AUTHENTICATION
-// =================================e===================================
+// ====================================================================
 async function initAdminPage(session) {
     if (AppStateAdmin.isInitialized) return;
     if (!session) {
@@ -24,23 +24,29 @@ async function initAdminPage(session) {
     try {
         const { data: userProfile, error } = await supabase
             .from('pengguna').select('role').eq('id', session.user.id).single();
+            
         const userRole = userProfile?.role?.trim().toLowerCase();
+        
         if (error || userRole !== 'super_admin') {
             alert('ACCESS DENIED! This page is for Super Administrators only.');
             await supabase.auth.signOut();
             window.location.replace('index.html');
             return;
         }
+        
         AppStateAdmin.isInitialized = true;
         const welcomeEl = document.getElementById('welcomeMessage');
         if (welcomeEl) welcomeEl.textContent = `Admin: ${session.user.email}`;
+        
         setupEventListeners();
         await loadAdminData();
+        
     } catch (err) {
         console.error("Initialization Error:", err);
         showStatusMessage("A system error occurred while loading the profile.", "error");
     }
 }
+
 supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') initAdminPage(session);
     else if (event === 'SIGNED_OUT') window.location.replace('index.html');
@@ -53,16 +59,27 @@ async function loadAdminData() {
     showLoading(true);
     try {
         const [schoolsReq, usersReq] = await Promise.all([
+            // 1. Get Schools
             supabase.from('sekolah').select('*').order('nama_sekolah', { ascending: true }),
-            supabase.from('pengguna').select(`id, email, sekolah_id, role, sekolah(nama_sekolah)`).order('email', { ascending: true })
+            
+            // 2. Get Users (Exclude Super Admin themselves)
+            // Added: 'role' and 'kelas_assigned' columns
+            supabase.from('pengguna')
+                .select(`id, email, sekolah_id, role, kelas_assigned, sekolah(nama_sekolah)`)
+                .neq('role', 'super_admin') 
+                .order('email', { ascending: true })
         ]);
+
         if (schoolsReq.error) throw new Error(`Failed to load schools: ${schoolsReq.error.message}`);
         if (usersReq.error) throw new Error(`Failed to load users: ${usersReq.error.message}`);
+
         AppStateAdmin.schools = schoolsReq.data;
         AppStateAdmin.users = usersReq.data;
+
         renderSchoolsTable();
         renderUsersTable();
         populateSchoolDropdown();
+        
     } catch (error) {
         showStatusMessage(error.message, 'error');
     } finally {
@@ -73,10 +90,12 @@ async function loadAdminData() {
 function renderSchoolsTable() {
     const tableBody = document.getElementById('schoolsTableBody');
     if (!tableBody) return;
+    
     if (AppStateAdmin.schools.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">No schools registered yet.</td></tr>`;
         return;
     }
+    
     tableBody.innerHTML = AppStateAdmin.schools.map(school => `
         <tr>
             <td><strong>${school.nama_sekolah}</strong></td>
@@ -98,17 +117,35 @@ function renderSchoolsTable() {
 function renderUsersTable() {
     const tableBody = document.getElementById('usersTableBody');
     if (!tableBody) return;
+    
     if (AppStateAdmin.users.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 20px;">No users registered yet.</td></tr>`;
         return;
     }
+    
     tableBody.innerHTML = AppStateAdmin.users.map(user => {
-        const schoolName = user.sekolah?.nama_sekolah ? `<span style="color: var(--success-dark); font-weight:500;">${user.sekolah.nama_sekolah}</span>` : `<span style="color: var(--danger-color); font-style:italic;">Not Linked</span>`;
-        const actionButtons = user.role === 'super_admin'
-            ? `<span class="badge" style="background:#ccc; padding:2px 5px; border-radius:4px; font-size:0.8em;">Super Admin</span>`
-            : `<button class="btn btn-sm btn-secondary" onclick="window.handleChangeUserSchool('${user.id}', '${user.email}')">Change</button>
-               <button class="btn btn-sm btn-danger" onclick="window.handleDeleteUser('${user.id}', '${user.email}')">Delete</button>`;
-        return `<tr><td>${user.email}</td><td>${schoolName}</td><td style="text-align: right; white-space: nowrap;">${actionButtons}</td></tr>`;
+        const schoolName = user.sekolah?.nama_sekolah 
+            ? `<span style="color: var(--text-color); font-weight:600;">${user.sekolah.nama_sekolah}</span>` 
+            : `<span style="color: var(--danger-color); font-style:italic;">Not Linked</span>`;
+
+        // Logic tampilan Role
+        let roleBadge = '';
+        if (user.role === 'wali_kelas') {
+            roleBadge = `<br><span class="badge" style="background:#e3f2fd; color:#0d47a1; padding:2px 6px; font-size:0.8em; border-radius:4px;">Wali Kelas: ${user.kelas_assigned || '?'}</span>`;
+        } else {
+            roleBadge = `<br><span class="badge" style="background:#e8f5e9; color:#2e7d32; padding:2px 6px; font-size:0.8em; border-radius:4px;">Admin Sekolah</span>`;
+        }
+
+        const actionButtons = `<button class="btn btn-sm btn-danger" onclick="window.handleDeleteUser('${user.id}', '${user.email}')">Delete</button>`;
+
+        return `<tr>
+            <td>${user.email}</td>
+            <td>
+                ${schoolName}
+                ${roleBadge}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">${actionButtons}</td>
+        </tr>`;
     }).join('');
 }
 
@@ -159,10 +196,8 @@ function setupEventListeners() {
         showLoading(true);
         let result;
         if (schoolId) {
-            // EDIT Mode: Update data based on ID
             result = await supabase.from('sekolah').update(payload).eq('id', schoolId);
         } else {
-            // ADD Mode: Insert new data
             result = await supabase.from('sekolah').insert(payload);
         }
         showLoading(false);
@@ -179,22 +214,51 @@ function setupEventListeners() {
     // Cancel Edit Button
     document.getElementById('cancelEditButton')?.addEventListener('click', resetSchoolForm);
 
-    // Add User Form
+    // Add User Form (Updated to support Roles & Class)
     document.getElementById('formPengguna')?.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const email = document.getElementById('userEmail').value.trim();
         const password = document.getElementById('userPassword').value;
         const schoolId = document.getElementById('userSchoolLink').value;
+        const role = document.getElementById('userRole').value;
+        const kelas = document.getElementById('userKelas').value.trim();
+
+        // Validasi Dasar
         if (!email || !password || !schoolId) return showStatusMessage('All fields are required.', 'error');
         if (password.length < 6) return showStatusMessage('Password must be at least 6 characters.', 'error');
+        
+        // Validasi Khusus Wali Kelas
+        if (role === 'wali_kelas' && !kelas) {
+            return showStatusMessage('Nama Kelas wajib diisi untuk role Wali Kelas.', 'error');
+        }
+
         showLoading(true);
-        const { data, error } = await supabase.functions.invoke('quick-task', { body: { action: 'createUser', payload: { email, password, schoolId } } });
+        
+        // Kirim data ke Edge Function
+        // Payload mencakup role dan kelas_assigned
+        const { data, error } = await supabase.functions.invoke('quick-task', { 
+            body: { 
+                action: 'createUser', 
+                payload: { 
+                    email, 
+                    password, 
+                    schoolId,
+                    role: role, 
+                    kelasAssigned: (role === 'wali_kelas') ? kelas : null
+                } 
+            } 
+        });
+        
         showLoading(false);
+        
         if (error || (data && data.error)) {
             showStatusMessage(`Failed to create user: ${error?.message || data?.error}`, 'error');
         } else {
-            showStatusMessage(`User ${email} created successfully!`, 'success');
+            showStatusMessage(`User ${email} created successfully as ${role}!`, 'success');
             document.getElementById('formPengguna').reset();
+            // Sembunyikan input kelas
+            document.getElementById('groupKelasInput').style.display = 'none';
             await loadAdminData();
         }
     });
@@ -215,34 +279,28 @@ window.handleEditSchool = function(schoolId) {
     const school = AppStateAdmin.schools.find(s => s.id === schoolId);
     if (!school) return;
 
-    // Populate the form with existing data
     document.getElementById('schoolIdInput').value = school.id;
     document.getElementById('schoolNameInput').value = school.nama_sekolah;
     document.getElementById('schoolSlugInput').value = school.slug || '';
     document.getElementById('schoolLogoInput').value = school.logo_url || '';
 
-    // Change button text and color for "Edit Mode"
     const submitBtn = document.getElementById('submitSchoolButton');
     submitBtn.textContent = 'Save Changes';
     submitBtn.classList.remove('btn-primary');
     submitBtn.classList.add('btn-accent');
     
-    // Show the cancel button
     document.getElementById('cancelEditButton').style.display = 'inline-flex';
-
-    // Scroll to the top to make the form visible
     document.getElementById('formTambahSekolah').scrollIntoView({ behavior: 'smooth' });
 };
 
 window.handleDeleteSchool = async function(schoolId, schoolName) {
-    const verification = prompt(`WARNING:\nDeleting the school "${schoolName}" will permanently remove ALL related data (Students, Attendance, Disciplinary Records).\n\nType the school name "${schoolName}" to confirm:`);
-    if (verification !== schoolName) {
-        if (verification !== null) alert("Deletion canceled. The name did not match.");
-        return;
-    }
+    const verification = prompt(`WARNING:\nDeleting the school "${schoolName}" will permanently remove ALL related data.\n\nType the school name "${schoolName}" to confirm:`);
+    if (verification !== schoolName) return;
+    
     showLoading(true);
     const { error } = await supabase.from('sekolah').delete().eq('id', schoolId);
     showLoading(false);
+    
     if (error) showStatusMessage(`Failed to delete: ${error.message}`, 'error');
     else {
         showStatusMessage(`School "${schoolName}" has been deleted.`, 'success');
@@ -252,35 +310,16 @@ window.handleDeleteSchool = async function(schoolId, schoolName) {
 
 window.handleDeleteUser = async function(userId, userEmail) {
     if (!confirm(`Are you sure you want to delete the user ${userEmail}?`)) return;
+    
     showLoading(true);
     const { data, error } = await supabase.functions.invoke('quick-task', {
         body: { action: 'deleteUser', payload: { userId: userId } }
     });
     showLoading(false);
+    
     if (error || (data && data.error)) showStatusMessage(`Failed to delete: ${error?.message || data?.error}`, 'error');
     else {
         showStatusMessage(`User ${userEmail} has been deleted.`, 'success');
-        await loadAdminData();
-    }
-};
-
-window.handleChangeUserSchool = async function(userId, userEmail) {
-    const schoolList = AppStateAdmin.schools.map((s, i) => `${i + 1}. ${s.nama_sekolah}`).join('\n');
-    const input = prompt(`Select a new school ID for ${userEmail}:\n\n${schoolList}\n\nEnter the number (1-${AppStateAdmin.schools.length}):`);
-    if (!input) return;
-    const index = parseInt(input) - 1;
-    if (isNaN(index) || index < 0 || index >= AppStateAdmin.schools.length) {
-        alert("Invalid selection.");
-        return;
-    }
-    const selectedSchool = AppStateAdmin.schools[index];
-    if (!confirm(`Move ${userEmail} to the school "${selectedSchool.nama_sekolah}"?`)) return;
-    showLoading(true);
-    const { error } = await supabase.from('pengguna').update({ sekolah_id: selectedSchool.id }).eq('id', userId);
-    showLoading(false);
-    if (error) showStatusMessage(`Update failed: ${error.message}`, 'error');
-    else {
-        showStatusMessage(`User moved to ${selectedSchool.nama_sekolah}`, 'success');
         await loadAdminData();
     }
 };
