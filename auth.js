@@ -1,6 +1,6 @@
 // File: auth.js
 // Tujuan: Menangani autentikasi, sesi, role management, dan halaman login dinamis.
-// Versi: 2.5 (Added Wali Kelas Redirect Logic)
+// Versi: 3.0 (Added Wali Kelas Redirect Logic)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
