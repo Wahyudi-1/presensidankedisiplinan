@@ -1,6 +1,6 @@
 // File: dashboard.js
 // Tujuan: Logika utama Dashboard (Presensi, Siswa, Disiplin, Export/Import).
-// Versi: 2.5 (Fixed Export, Print All QR, & Import Logic)
+// Versi: 2.6 (Fixed CSV Import Header for WhatsappOrtu)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, playSound } from './utils.js';
@@ -443,14 +443,17 @@ function handleImportSiswa(event) {
                 const nisn = row.NISN || row.nisn || row.Nisn;
                 const nama = row.Nama || row.nama || row.NAMA;
                 const kelas = row.Kelas || row.kelas;
-                const wa = row.Whatsapp || row.WA || row.wa || row.whatsapp_ortu;
+                
+                // === PERBAIKAN DI SINI ===
+                // Menambahkan 'row.WhatsappOrtu' agar sesuai dengan template CSV Anda
+                const wa = row.Whatsapp || row.WA || row.wa || row.whatsapp_ortu || row.WhatsappOrtu;
 
                 if (nisn && nama) {
                     validData.push({
                         nisn: nisn.toString().trim(),
                         nama: nama.toString().trim(),
                         kelas: kelas ? kelas.toString().trim() : null,
-                        whatsapp_ortu: wa ? wa.toString().replace(/\D/g,'') : null,
+                        whatsapp_ortu: wa ? wa.toString().replace(/\D/g,'') : null, // Hanya ambil angka
                         sekolah_id: AppState.userSekolahId
                     });
                 }
