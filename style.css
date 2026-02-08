@@ -448,3 +448,63 @@ td { border-bottom: 1px solid var(--border-color); font-size: 0.95rem; }
     background: #fff;
     border-radius: var(--border-radius);
 }
+
+/* =================================================================
+   8. STYLE KHUSUS MOBILE & HALAMAN WALI KELAS
+   ================================================================= */
+
+/* A. Navigasi Ikon untuk Mobile */
+.section-nav-icons {
+    justify-content: space-around; /* Agar ikon merata */
+}
+
+.section-nav-icons button .nav-text {
+    display: block; /* Teks di bawah ikon */
+    font-size: 0.7rem;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+/* Sembunyikan teks di layar super kecil, hanya tampilkan ikon */
+@media (max-width: 380px) {
+    .section-nav-icons button .nav-text {
+        display: none;
+    }
+    .section-nav-icons button {
+        padding: 0.8rem;
+    }
+}
+
+/* B. Layout Filter Rekap di Halaman Wali Kelas */
+.rekap-filter-wali {
+    display: flex;
+    flex-direction: column; /* Susun vertikal di mobile */
+    gap: 1rem;
+    background-color: var(--secondary-color);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+}
+
+.rekap-filter-wali .form-group {
+    margin-bottom: 0;
+}
+
+/* Ubah ke layout horizontal di layar lebih besar */
+@media (min-width: 500px) {
+    .rekap-filter-wali {
+        flex-direction: row;
+        align-items: flex-end; /* Sejajarkan tombol dengan input */
+    }
+    .rekap-filter-wali .form-group:first-child {
+        flex-grow: 1; /* Biarkan input tanggal memanjang */
+    }
+}
+
+/* C. Card Header yang lebih simpel di Mobile */
+@media (max-width: 768px) {
+    .card-header {
+        font-size: 1rem;
+        padding-bottom: 0.8rem;
+        margin-bottom: 1rem;
+    }
+}
