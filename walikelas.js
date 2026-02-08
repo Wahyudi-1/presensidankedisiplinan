@@ -1,5 +1,5 @@
 // File: walikelas.js
-// Versi: 2.1 (FIXED: Scanner logic & CHANGED: Wali Kelas can scan all students in the school)
+// Versi: 2.2 (Added "Send WhatsApp" feature to Rekap)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, playSound } from './utils.js';
@@ -9,11 +9,10 @@ let WaliState = {
     sekolahId: null,
     kelasAssigned: null,
     namaSekolah: '',
-    siswaDiSekolah: [], // PERUBAHAN: Menyimpan semua siswa di sekolah, bukan per kelas
+    siswaDiSekolah: [],
     isScanning: false,
 };
 
-// Instance Scanner Global
 let html5QrcodeScanner = null;
 
 export async function initWaliKelasPage() {
@@ -38,17 +37,15 @@ export async function initWaliKelasPage() {
     document.getElementById('welcomeMessage').textContent = `Halo, Wali Kelas ${user.kelas_assigned || ''}`;
     document.getElementById('infoKelasTitle').textContent = `${user.sekolah.nama_sekolah} - Kelas ${user.kelas_assigned || 'Semua Kelas'}`;
     
-    await loadSiswaSekolah(); // PERUBAHAN: Memuat semua siswa di sekolah
+    await loadSiswaSekolah();
     setupListeners();
     document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
 }
 
-// === PERUBAHAN LOGIKA DI SINI ===
-// Fungsi ini sekarang memuat SEMUA siswa di sekolah untuk validasi scan
 async function loadSiswaSekolah() {
     const { data, error } = await supabase
         .from('siswa')
-        .select('nisn, nama, kelas')
+        .select('nisn, nama, kelas, whatsapp_ortu') // Ambil juga WA Ortu
         .eq('sekolah_id', WaliState.sekolahId);
     
     if(error) {
@@ -56,9 +53,7 @@ async function loadSiswaSekolah() {
         return;
     }
     WaliState.siswaDiSekolah = data;
-    console.log(`Berhasil memuat ${data.length} siswa dari sekolah ini.`);
 }
-// ===============================
 
 function setupListeners() {
     document.getElementById('logoutButton').addEventListener('click', handleLogout);
@@ -89,25 +84,18 @@ function setupListeners() {
     document.getElementById('tglRekap').value = new Date().toISOString().split('T')[0];
 }
 
-// === LOGIKA SCANNER ===
 function startQrScanner(type) {
     if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
         stopQrScanner();
     }
-
     const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    
     if (resultEl) resultEl.className = 'scan-result';
-
     const onScanSuccess = async (decodedText) => {
         if (WaliState.isScanning) return;
-        
         WaliState.isScanning = true;
-        html5QrcodeScanner.pause(true); // PERBAIKAN TYPO DI SINI
-
+        html5QrcodeScanner.pause(true);
         await processPresensiWali(decodedText, type);
-
         setTimeout(() => {
             WaliState.isScanning = false;
             if (html5QrcodeScanner) {
@@ -116,7 +104,6 @@ function startQrScanner(type) {
             }
         }, 2500); 
     };
-
     const config = { fps: 10, qrbox: { width: 250, height: 250 }};
     html5QrcodeScanner = new Html5QrcodeScanner(elementId, config, false);
     html5QrcodeScanner.render(onScanSuccess, () => {});
@@ -125,38 +112,26 @@ function startQrScanner(type) {
 function stopQrScanner() {
     if (html5QrcodeScanner) {
         try {
-            if (html5QrcodeScanner.getState() === 2) { // 2 = scanning
+            if (html5QrcodeScanner.getState() === 2) {
                 html5QrcodeScanner.stop();
             }
             html5QrcodeScanner.clear();
-        } catch (e) {
-            console.warn("Gagal membersihkan scanner:", e);
-        }
+        } catch (e) { console.warn("Gagal membersihkan scanner:", e); }
         html5QrcodeScanner = null;
     }
 }
 
 async function processPresensiWali(nisn, type) {
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    
-    // === PERUBAHAN LOGIKA DI SINI ===
-    // Validasi: Apakah siswa terdaftar di sekolah ini?
     const siswa = WaliState.siswaDiSekolah.find(s => s.nisn == nisn);
-
     if (!siswa) {
         playSound('error');
         resultEl.className = 'scan-result error';
-        resultEl.innerHTML = `<strong>GAGAL:</strong><br>Siswa dengan NISN ${nisn}<br>tidak terdaftar di sekolah ini.`;
+        resultEl.innerHTML = `<strong>GAGAL:</strong><br>Siswa NISN ${nisn} tidak terdaftar di sekolah ini.`;
         return;
     }
-
-    // Proses presensi sama seperti dashboard.js
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    const { data: logHarian, error: checkError } = await supabase
-        .from('presensi').select('*').eq('nisn_siswa', nisn).gte('waktu_datang', today.toISOString()).maybeSingle();
-
+    const today = new Date(); today.setHours(0,0,0,0);
+    const { data: logHarian, error: checkError } = await supabase.from('presensi').select('*').eq('nisn_siswa', nisn).gte('waktu_datang', today.toISOString()).maybeSingle();
     if (checkError) { resultEl.textContent = "Koneksi Error."; return; }
 
     if (type === 'datang') {
@@ -196,27 +171,16 @@ async function processPresensiWali(nisn, type) {
     }
 }
 
-// === LOGIKA MONITORING (Tabel) ===
-// Tabel tetap HANYA menampilkan data dari kelas yang ditugaskan
 async function loadDailyLog(type) {
     showLoading(true);
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
     const tableId = type === 'datang' ? 'tableBodyDatang' : 'tableBodyPulang';
-    
     let query = supabase.from('presensi').select(`waktu_datang, waktu_pulang, siswa!inner(nisn, nama, kelas)`)
-        .eq('sekolah_id', WaliState.sekolahId)
-        .eq('siswa.kelas', WaliState.kelasAssigned)
-        .gte('waktu_datang', today.toISOString())
-        .order('waktu_datang', { ascending: false });
-
-    if (type === 'pulang') {
-        query = query.not('waktu_pulang', 'is', null);
-    }
-
+        .eq('sekolah_id', WaliState.sekolahId).eq('siswa.kelas', WaliState.kelasAssigned)
+        .gte('waktu_datang', today.toISOString()).order('waktu_datang', { ascending: false });
+    if (type === 'pulang') query = query.not('waktu_pulang', 'is', null);
     const { data, error } = await query;
     showLoading(false);
-
     const tbody = document.getElementById(tableId);
     if (error || !data || data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="3" align="center">Belum ada data siswa ${WaliState.kelasAssigned}.</td></tr>`;
@@ -229,8 +193,7 @@ async function loadDailyLog(type) {
     }).join('');
 }
 
-// === LOGIKA REKAP ===
-// Rekap tetap HANYA menampilkan data dari kelas yang ditugaskan
+// === LOGIKA REKAP (DIPERBARUI) ===
 async function loadRekap() {
     const tgl = document.getElementById('tglRekap').value;
     if (!tgl) return alert("Pilih tanggal dulu.");
@@ -239,8 +202,12 @@ async function loadRekap() {
     const start = new Date(tgl); start.setHours(0,0,0,0);
     const end = new Date(tgl); end.setHours(23,59,59,999);
 
+    // PERUBAHAN: Query sekarang mengambil `whatsapp_ortu`
     const { data, error } = await supabase
-        .from('presensi').select(`waktu_datang, waktu_pulang, status, siswa!inner(nisn, nama, kelas)`)
+        .from('presensi').select(`
+            waktu_datang, waktu_pulang, status, 
+            siswa!inner(nisn, nama, kelas, whatsapp_ortu)
+        `)
         .eq('sekolah_id', WaliState.sekolahId)
         .eq('siswa.kelas', WaliState.kelasAssigned)
         .gte('waktu_datang', start.toISOString())
@@ -252,18 +219,50 @@ async function loadRekap() {
     if (error) return showStatusMessage('Gagal memuat rekap.', 'error');
 
     if (data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" align="center">Tidak ada data presensi pada tanggal ini.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" align="center">Tidak ada data presensi pada tanggal ini.</td></tr>`;
     } else {
+        // PERUBAHAN: Render tabel dengan tombol WA
         tbody.innerHTML = data.map(row => {
             const jamMasuk = new Date(row.waktu_datang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
             const jamPulang = row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
+            
+            let waBtn = '-';
+            if (row.siswa && row.siswa.whatsapp_ortu) {
+                waBtn = `<button class="btn btn-sm btn-success" onclick="window.sendWA('${row.siswa.nama}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang}')">📱 WA</button>`;
+            }
+
             return `<tr>
-                <td>${new Date(row.waktu_datang).toLocaleDateString('id-ID')}</td>
-                <td>${row.siswa.nama}</td>
-                <td>${jamMasuk}</td>
-                <td>${jamPulang}</td>
-                <td>${row.status || 'Hadir'}</td>
+                <td data-label="Tanggal">${new Date(row.waktu_datang).toLocaleDateString('id-ID')}</td>
+                <td data-label="Nama">${row.siswa.nama}</td>
+                <td data-label="Masuk">${jamMasuk}</td>
+                <td data-label="Pulang">${jamPulang}</td>
+                <td data-label="Ket">${row.status || 'Hadir'}</td>
+                <td data-label="Aksi">${waBtn}</td>
             </tr>`;
         }).join('');
     }
 }
+
+// === FUNGSI BARU: Kirim WhatsApp (di-copy dari dashboard.js) ===
+window.sendWA = function(nama, noHp, tglMasuk, tglPulang) {
+    let cleanHp = noHp.replace(/\D/g, '');
+    if (cleanHp.startsWith('0')) cleanHp = '62' + cleanHp.slice(1);
+    if (!cleanHp.startsWith('62')) cleanHp = '62' + cleanHp;
+
+    const dMasuk = new Date(tglMasuk);
+    const textMasuk = dMasuk.toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
+    
+    let textPulang = "Belum Presensi Pulang";
+    if (tglPulang && tglPulang !== 'null' && tglPulang !== 'undefined') {
+        textPulang = new Date(tglPulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+    }
+
+    const pesan = `Assalamualaikum Wr. Wb.
+Yth. Wali Murid dari *${nama}*.
+Informasi presensi dari ${WaliState.namaSekolah}:
+📅 *Datang:* ${textMasuk}
+🏠 *Pulang:* ${textPulang}
+Terima kasih.`;
+
+    window.open(`https://api.whatsapp.com/send?phone=${cleanHp}&text=${encodeURIComponent(pesan)}`, '_blank');
+};
