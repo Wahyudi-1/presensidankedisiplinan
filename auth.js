@@ -1,6 +1,6 @@
 // File: auth.js
-// Tujuan: Menangani autentikasi, sesi, dan halaman login dinamis.
-// Versi: 2.4 (Fixed Reset Password URL & Robust Login)
+// Tujuan: Menangani autentikasi, sesi, role management, dan halaman login dinamis.
+// Versi: 2.5 (Added Wali Kelas Redirect Logic)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, setupPasswordToggle } from './utils.js';
@@ -49,9 +49,10 @@ async function setupDynamicLoginPage() {
 
 
 // ====================================================================
-// 1. LOGIKA UTAMA: CEK SESI & REDIRECT
+// 1. LOGIKA UTAMA: CEK SESI & REDIRECT BERDASARKAN ROLE
 // ====================================================================
 export async function checkAuthenticationAndSetup() {
+    // Abaikan jika ini adalah proses reset password via link email
     if (window.location.hash && window.location.hash.includes('type=recovery')) {
         return; 
     }
@@ -59,22 +60,25 @@ export async function checkAuthenticationAndSetup() {
     const { data: { session } } = await supabase.auth.getSession();
     const path = window.location.pathname;
     
+    // Identifikasi halaman saat ini
     const isLoginPage = path.includes('index.html') || path === '/' || path.endsWith('/');
     const isDashboard = path.includes('dashboard.html');
     const isAdminPage = path.includes('superadmin.html');
+    const isWaliPage  = path.includes('walikelas.html');
 
     // SKENARIO 1: Belum Login
     if (!session) {
         if (!isLoginPage) {
+            // Jika akses halaman internal tanpa login -> tendang ke login
             window.location.replace('index.html');
         }
         return;
     }
 
-    // SKENARIO 2: Sudah Login
+    // SKENARIO 2: Sudah Login -> Cek Role
     if (session) {
         try {
-            // Menggunakan .maybeSingle() agar aman dari error fatal
+            // Menggunakan .maybeSingle() agar aman dari error fatal jika data kosong
             const { data: userProfile, error } = await supabase
                 .from('pengguna')
                 .select('role')
@@ -88,20 +92,41 @@ export async function checkAuthenticationAndSetup() {
 
             if (!userProfile) {
                 console.error("Profil pengguna tidak ditemukan.");
-                alert("Akun terdaftar, tapi data profil belum ada. Hubungi Admin.");
+                alert("Akun terdaftar, tapi data profil belum ada di tabel 'pengguna'. Hubungi Admin.");
                 await supabase.auth.signOut();
                 window.location.replace('index.html');
                 return;
             }
             
+            // Normalisasi role (kecilkan huruf, hilangkan spasi)
             const userRole = userProfile.role?.trim().toLowerCase() || 'user';
 
+            // --- LOGIKA REDIRECT ROLE ---
+
+            // A. SUPER ADMIN
             if (userRole === 'super_admin') {
-                if (!isAdminPage) window.location.replace('superadmin.html');
-                else updateWelcomeMessage(session.user.email);
-            } else {
-                if (!isDashboard) window.location.replace('dashboard.html');
-                else updateWelcomeMessage(session.user.email);
+                if (!isAdminPage) {
+                    window.location.replace('superadmin.html');
+                } else {
+                    updateWelcomeMessage(session.user.email);
+                }
+            } 
+            // B. WALI KELAS (BARU)
+            else if (userRole === 'wali_kelas') {
+                if (!isWaliPage) {
+                    // Jika wali kelas mencoba akses dashboard/admin, paksa ke halaman walikelas
+                    window.location.replace('walikelas.html');
+                }
+                // Catatan: Welcome message untuk wali kelas dihandle di walikelas.js
+            }
+            // C. ADMIN SEKOLAH / OPERATOR (DEFAULT)
+            else {
+                if (!isDashboard) {
+                    // Jika user biasa mencoba akses admin/walikelas, paksa ke dashboard
+                    window.location.replace('dashboard.html');
+                } else {
+                    updateWelcomeMessage(session.user.email);
+                }
             }
 
         } catch (err) {
@@ -189,7 +214,7 @@ async function handleLogin() {
         return showStatusMessage(msg, 'error');
     }
     
-    // 2. Cek Profil & Redirect
+    // 2. Cek Profil & Redirect (Fungsi ini akan menangani routing berdasarkan role)
     await checkAuthenticationAndSetup();
 }
 
@@ -216,11 +241,9 @@ async function handleForgotPassword() {
     }
     showLoading(true);
     
-    // --- PERBAIKAN URL RESET PASSWORD ---
-    // Menggunakan URL statis agar tidak mengarah ke localhost saat user
-    // melakukan reset password dari production/website asli.
-    const redirectTo = 'https://wahyudi-1.github.io/presensidankedisiplinan/index.html'; 
-    // ------------------------------------
+    // URL Redirect setelah klik link di email
+    // Ganti URL ini dengan URL website production Anda jika sudah online
+    const redirectTo = window.location.href.split('?')[0]; 
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     
