@@ -1,6 +1,6 @@
 // File: app-admin.js
 // Purpose: Logic for the Super Admin Panel.
-// Version: 3.2 (Added Edit Feature & Fixed Create Wali Kelas)
+// Version: 3.3 (FIXED: Re-added missing renderSchoolsTable function & refined Edit/Create logic)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage } from './utils.js';
@@ -34,7 +34,8 @@ async function initAdminPage(session) {
         setupEventListeners();
         await loadAdminData();
     } catch (err) {
-        console.error(err);
+        console.error("Initialization Error:", err);
+        showStatusMessage("Gagal memuat halaman, periksa koneksi.", "error");
     }
 }
 
@@ -63,9 +64,11 @@ async function loadAdminData() {
         AppStateAdmin.schools = schoolsReq.data;
         AppStateAdmin.users = usersReq.data;
         
-        renderSchoolsTable();
+        // Memanggil fungsi render setelah data berhasil dimuat
+        renderSchoolsTable(); // Fungsi yang hilang sebelumnya
         renderUsersTable();
         populateSchoolDropdown();
+
     } catch (error) {
         showStatusMessage(error.message, 'error');
     } finally {
@@ -73,17 +76,41 @@ async function loadAdminData() {
     }
 }
 
+// === FUNGSI YANG HILANG (SEKARANG SUDAH ADA KEMBALI) ===
+function renderSchoolsTable() {
+    const tableBody = document.getElementById('schoolsTableBody');
+    if (!tableBody) return;
+    
+    if (AppStateAdmin.schools.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="4" align="center">Belum ada sekolah terdaftar.</td></tr>`;
+        return;
+    }
+    
+    tableBody.innerHTML = AppStateAdmin.schools.map(school => `
+        <tr>
+            <td><strong>${school.nama_sekolah}</strong></td>
+            <td><code>${school.slug || '-'}</code></td>
+            <td><a href="${school.logo_url || '#'}" target="_blank">${school.logo_url ? 'Link Logo' : '-'}</a></td>
+            <td style="text-align: right; white-space: nowrap; gap:5px; display:flex; justify-content:flex-end;">
+                <button class="btn btn-sm btn-secondary" onclick="window.handleEditSchool('${school.id}')">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="window.handleDeleteSchool('${school.id}', '${school.nama_sekolah.replace(/'/g, "\\'")}')">Hapus</button>
+            </td>
+        </tr>
+    `).join('');
+}
+// =========================================================
+
 function renderUsersTable() {
     const tableBody = document.getElementById('usersTableBody');
     if (!tableBody) return;
     
     if (AppStateAdmin.users.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="3" align="center">No users found.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="3" align="center">Belum ada pengguna terdaftar.</td></tr>`;
         return;
     }
     
     tableBody.innerHTML = AppStateAdmin.users.map(user => {
-        const schoolName = user.sekolah?.nama_sekolah || `<span style="color:red">No School</span>`;
+        const schoolName = user.sekolah?.nama_sekolah || `<span style="color:red">Belum ditautkan</span>`;
         
         let roleBadge = '';
         if (user.role === 'wali_kelas') {
@@ -92,7 +119,6 @@ function renderUsersTable() {
             roleBadge = `<br><span class="badge" style="background:#e8f5e9; color:#2e7d32; padding:2px 6px; font-size:0.8em; border-radius:4px;">Admin Sekolah</span>`;
         }
 
-        // TAMBAHKAN TOMBOL EDIT DI SINI
         const actionButtons = `
             <button class="btn btn-sm btn-secondary" onclick="window.handleEditUser('${user.id}')">Edit</button>
             <button class="btn btn-sm btn-danger" onclick="window.handleDeleteUser('${user.id}', '${user.email}')">Hapus</button>
@@ -109,7 +135,6 @@ function renderUsersTable() {
 function populateSchoolDropdown() {
     const select = document.getElementById('userSchoolLink');
     if (!select) return;
-    // Simpan value lama jika sedang edit
     const currentValue = select.value;
     select.innerHTML = '<option value="">-- Pilih Sekolah --</option>';
     AppStateAdmin.schools.forEach(school => {
@@ -129,23 +154,20 @@ function resetUserForm() {
     document.getElementById('formPengguna').reset();
     AppStateAdmin.editingUserId = null;
     
-    // Kembalikan tombol ke mode "Buat"
     const btn = document.querySelector('#formPengguna button[type="submit"]');
-    btn.textContent = '+ Buat & Tautkan Pengguna';
+    btn.textContent = '+ Buat Pengguna';
     btn.classList.remove('btn-accent');
     btn.classList.add('btn-success');
 
-    // Reset input
-    document.getElementById('userEmail').disabled = false; // Email bisa diedit saat create, tapi readonly saat edit (opsional)
+    document.getElementById('userEmail').disabled = false;
+    document.getElementById('userPassword').placeholder = "Min. 6 karakter";
     document.getElementById('groupKelasInput').style.display = 'none';
     
-    // Tampilkan tombol Batal jika ada
     const cancelBtn = document.getElementById('cancelEditUserBtn');
     if(cancelBtn) cancelBtn.remove();
 }
 
 function setupEventListeners() {
-    // 1. Add/Edit School (Kode Sekolah tetap sama...)
     document.getElementById('formTambahSekolah')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const schoolId = document.getElementById('schoolIdInput').value;
@@ -169,6 +191,7 @@ function setupEventListeners() {
             await loadAdminData();
         }
     });
+
     document.getElementById('cancelEditButton')?.addEventListener('click', () => {
         document.getElementById('formTambahSekolah').reset();
         document.getElementById('schoolIdInput').value = '';
@@ -176,7 +199,6 @@ function setupEventListeners() {
         document.getElementById('submitSchoolButton').textContent = '+ Tambah Sekolah';
     });
 
-    // 2. Add/Edit USER (LOGIC UPDATE ADA DI SINI)
     document.getElementById('formPengguna')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -191,60 +213,37 @@ function setupEventListeners() {
 
         showLoading(true);
 
-        // A. MODE EDIT (UPDATE)
-        if (AppStateAdmin.editingUserId) {
-            // Update Data Profil (Public Table)
+        if (AppStateAdmin.editingUserId) { // MODE EDIT
             const updatePayload = {
                 sekolah_id: schoolId,
                 role: role,
                 kelas_assigned: (role === 'wali_kelas') ? kelas : null
-                // Catatan: Email di tabel pengguna sebaiknya tidak diubah sembarangan jika tidak sinkron dengan Auth
             };
+            const { error: dbError } = await supabase.from('pengguna').update(updatePayload).eq('id', AppStateAdmin.editingUserId);
 
-            const { error: dbError } = await supabase
-                .from('pengguna')
-                .update(updatePayload)
-                .eq('id', AppStateAdmin.editingUserId);
-
-            // Update Password jika diisi (Optional via Edge Function)
             if (password) {
-                await supabase.functions.invoke('quick-task', { 
-                    body: { action: 'updateUserPassword', payload: { userId: AppStateAdmin.editingUserId, password: password } } 
-                });
+                await supabase.functions.invoke('quick-task', { body: { action: 'updateUserPassword', payload: { userId: AppStateAdmin.editingUserId, password } } });
             }
 
             showLoading(false);
-            if (dbError) {
-                showStatusMessage(`Gagal update: ${dbError.message}`, 'error');
-            } else {
+            if (dbError) showStatusMessage(`Gagal update: ${dbError.message}`, 'error');
+            else {
                 showStatusMessage('Data pengguna diperbarui!', 'success');
                 resetUserForm();
                 await loadAdminData();
             }
 
-        } 
-        // B. MODE CREATE (BARU)
-        else {
+        } else { // MODE CREATE
             if (!password) {
                 showLoading(false);
                 return showStatusMessage('Password wajib diisi untuk user baru.', 'error');
             }
-
-            // Panggil Edge Function
             const { data, error } = await supabase.functions.invoke('quick-task', { 
-                body: { 
-                    action: 'createUser', 
-                    payload: { 
-                        email, password, schoolId, role, 
-                        kelasAssigned: (role === 'wali_kelas') ? kelas : null
-                    } 
-                } 
+                body: { action: 'createUser', payload: { email, password, schoolId, role, kelasAssigned: (role === 'wali_kelas') ? kelas : null } } 
             });
-            
             showLoading(false);
-            if (error || (data && data.error)) {
-                showStatusMessage(`Gagal buat user: ${error?.message || data?.error}`, 'error');
-            } else {
+            if (error || (data && data.error)) showStatusMessage(`Gagal buat user: ${error?.message || data?.error}`, 'error');
+            else {
                 showStatusMessage(`User ${email} berhasil dibuat!`, 'success');
                 resetUserForm();
                 await loadAdminData();
@@ -261,36 +260,29 @@ function setupEventListeners() {
 }
 
 // Global Functions
-
-// EDIT USER HANDLER
 window.handleEditUser = function(userId) {
     const user = AppStateAdmin.users.find(u => u.id === userId);
     if (!user) return;
 
     AppStateAdmin.editingUserId = userId;
 
-    // Isi Form
     document.getElementById('userEmail').value = user.email;
-    document.getElementById('userEmail').disabled = true; // Email dikunci agar aman
-    document.getElementById('userPassword').value = ''; // Kosongkan password (hanya isi jika ingin ubah)
+    document.getElementById('userEmail').disabled = true;
+    document.getElementById('userPassword').value = '';
     document.getElementById('userPassword').placeholder = "Kosongkan jika tidak ubah password";
-    
     document.getElementById('userSchoolLink').value = user.sekolah_id;
     document.getElementById('userRole').value = user.role || 'admin_sekolah';
     
-    // Trigger logika tampilan input kelas
     window.toggleKelasInput(); 
     if (user.role === 'wali_kelas') {
         document.getElementById('userKelas').value = user.kelas_assigned || '';
     }
 
-    // Ubah tampilan tombol
     const submitBtn = document.querySelector('#formPengguna button[type="submit"]');
     submitBtn.textContent = 'Simpan Perubahan';
     submitBtn.classList.remove('btn-success');
     submitBtn.classList.add('btn-accent');
 
-    // Tambahkan tombol Batal jika belum ada
     if (!document.getElementById('cancelEditUserBtn')) {
         const cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
@@ -301,12 +293,9 @@ window.handleEditUser = function(userId) {
         cancelBtn.onclick = resetUserForm;
         submitBtn.parentNode.insertBefore(cancelBtn, submitBtn);
     }
-
-    // Scroll ke form
     document.getElementById('formPengguna').scrollIntoView({ behavior: 'smooth' });
 };
 
-// Fungsi helper toggle input kelas (harus global agar bisa dipanggil onchange di HTML)
 window.toggleKelasInput = function() {
     const role = document.getElementById('userRole').value;
     const div = document.getElementById('groupKelasInput');
@@ -348,6 +337,6 @@ window.handleDeleteUser = async function(id, email) {
         body: { action: 'deleteUser', payload: { userId: id } }
     });
     showLoading(false);
-    if (error || (data && data.error)) showStatusMessage(`Gagal hapus: ${error?.message}`, 'error');
+    if (error || (data && data.error)) showStatusMessage(`Gagal hapus: ${error?.message || data?.error}`, 'error');
     else { showStatusMessage('User dihapus.', 'success'); await loadAdminData(); }
 };
