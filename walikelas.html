@@ -15,7 +15,7 @@
             <span style="font-weight: 300;">Panel</span> Wali Kelas
         </div>
         <nav>
-            <span id="welcomeMessage" style="margin-right: 15px; font-size: 0.9rem;">...</span>
+            <span id="welcomeMessage" style="margin-right: 15px; font-size: 0.9rem; display: none;">...</span>
             <button id="logoutButton" class="btn btn-sm btn-danger">Logout</button>
         </nav>
     </header>
@@ -25,29 +25,33 @@
         <h3 id="infoKelasTitle" style="color: var(--primary-color);">Memuat Info Kelas...</h3>
     </div>
 
-    <!-- NAVIGASI TAB -->
-    <nav class="section-nav" style="justify-content: center;">
-        <button data-section="datangSection" class="btn btn-nav active">Presensi Datang</button>
-        <button data-section="pulangSection" class="btn btn-nav">Presensi Pulang</button>
-        <button data-section="rekapSection" class="btn btn-nav">Rekap Absensi</button>
+    <!-- NAVIGASI TAB (MOBILE FRIENDLY) -->
+    <nav class="section-nav section-nav-icons">
+        <button data-section="datangSection" class="btn btn-nav active">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M11.854 3.146a.5.5 0 0 0-.708 0L8 6.293 4.854 3.146a.5.5 0 1 0-.708.708L7.293 7 4.146 10.146a.5.5 0 0 0 .708.708L8 7.707l3.146 3.147a.5.5 0 0 0 .708-.708L8.707 7l3.147-3.146a.5.5 0 0 0 0-.708z"/><path d="M4 1.5a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-12a.5.5 0 0 0-.5-.5H4zM3 1.5a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 14 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 3 13.5v-12z"/></svg>
+            <span class="nav-text">Datang</span>
+        </button>
+        <button data-section="pulangSection" class="btn btn-nav">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-12a.5.5 0 0 0-.5-.5H4zM3 1.5a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 14 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 3 13.5v-12z"/><path d="M6.5 4.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm3 2a.5.5 0 0 1 .5-.5h-5a.5.5 0 0 1 0-1h5a.5.5 0 0 1 .5.5z"/></svg>
+            <span class="nav-text">Pulang</span>
+        </button>
+        <button data-section="rekapSection" class="btn btn-nav">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M6 1v3H1V1h5zM1 0a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1H1zm10 10v3H1V10h10zM1 9a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1H1zm4-8a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V1zm1 1v1h3V2H6z"/></svg>
+            <span class="nav-text">Rekap</span>
+        </button>
     </nav>
 
     <main class="container">
         <div id="statusMessage" class="status-message" style="display: none;"></div>
         <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
 
-        <!-- ============================================= -->
-        <!-- 1. PRESENSI DATANG (DENGAN SCANNER)           -->
-        <!-- ============================================= -->
+        <!-- 1. PRESENSI DATANG -->
         <div id="datangSection" class="content-section">
             <div class="card">
                 <div class="card-header">Scan QR Code Siswa - Datang</div>
-                
-                <!-- BLOK SCANNER BARU -->
                 <div id="qrScannerDatang" style="width: 100%; max-width: 400px; margin: 10px auto; border-radius: var(--border-radius); overflow: hidden; background: #000;"></div>
                 <div id="scanResultDatang" class="scan-result">Arahkan kamera ke QR Code...</div>
-                
-                <h4 style="margin-top: 2rem; margin-bottom: 1rem; border-left: 4px solid var(--primary-color); padding-left: 10px;">Log Masuk Hari Ini</h4>
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem;">Log Masuk Hari Ini</h4>
                 <div class="table-container">
                     <table>
                         <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th></tr></thead>
@@ -57,21 +61,16 @@
             </div>
         </div>
 
-        <!-- ============================================= -->
-        <!-- 2. PRESENSI PULANG (DENGAN SCANNER)           -->
-        <!-- ============================================= -->
+        <!-- 2. PRESENSI PULANG -->
         <div id="pulangSection" class="content-section" style="display: none;">
             <div class="card">
                 <div class="card-header">Scan QR Code Siswa - Pulang</div>
-                
-                <!-- BLOK SCANNER BARU -->
                 <div id="qrScannerPulang" style="width: 100%; max-width: 400px; margin: 10px auto; border-radius: var(--border-radius); overflow: hidden; background: #000;"></div>
                 <div id="scanResultPulang" class="scan-result">Arahkan kamera ke QR Code...</div>
-
-                <h4 style="margin-top: 2rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-dark); padding-left: 10px;">Log Pulang Hari Ini</h4>
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem;">Log Pulang Hari Ini</h4>
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>Waktu Pulang</th><th>NISN</th><th>Nama</th></tr></thead>
+                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th></tr></thead>
                         <tbody id="tableBodyPulang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
                     </table>
                 </div>
@@ -81,10 +80,16 @@
         <!-- 3. REKAP -->
         <div id="rekapSection" class="content-section" style="display: none;">
             <div class="card">
-                <div class="card-header">Rekapitulasi Kelas</div>
-                <div class="form-grid" style="background:#f8f9fa; padding:15px; border-radius:8px;">
-                    <div class="form-group"><label>Tanggal</label><input type="date" id="tglRekap" class="form-control"></div>
-                    <div class="form-group"><button id="btnCariRekap" class="btn btn-primary" style="margin-top:28px;">Tampilkan</button></div>
+                <div class="card-header">Rekapitulasi Absensi Kelas</div>
+                <!-- FILTER DENGAN LAYOUT BARU -->
+                <div class="rekap-filter-wali">
+                    <div class="form-group">
+                        <label for="tglRekap">Pilih Tanggal</label>
+                        <input type="date" id="tglRekap" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <button id="btnCariRekap" class="btn btn-primary btn-block">Tampilkan</button>
+                    </div>
                 </div>
                 <br>
                 <div class="table-container">
@@ -96,10 +101,9 @@
                                 <th>Masuk</th>
                                 <th>Pulang</th>
                                 <th>Ket</th>
-                                <th>Aksi (WA)</th> <!-- KOLOM BARU -->
+                                <th>Aksi (WA)</th>
                             </tr>
                         </thead>
-    <tbody id="tableBodyRekap">
                         <tbody id="tableBodyRekap"><tr><td colspan="6" align="center">Pilih tanggal...</td></tr></tbody>
                     </table>
                 </div>
@@ -107,9 +111,7 @@
         </div>
     </main>
 
-    <!-- PENTING: TAMBAHKAN LIBRARY SCANNER -->
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="main.js"></script>
 </body>
