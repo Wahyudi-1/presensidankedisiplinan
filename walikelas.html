@@ -27,8 +27,8 @@
 
     <!-- NAVIGASI TAB -->
     <nav class="section-nav" style="justify-content: center;">
-        <button data-section="datangSection" class="btn btn-nav active">Monitoring Datang</button>
-        <button data-section="pulangSection" class="btn btn-nav">Monitoring Pulang</button>
+        <button data-section="datangSection" class="btn btn-nav active">Presensi Datang</button>
+        <button data-section="pulangSection" class="btn btn-nav">Presensi Pulang</button>
         <button data-section="rekapSection" class="btn btn-nav">Rekap Absensi</button>
     </nav>
 
@@ -36,25 +36,39 @@
         <div id="statusMessage" class="status-message" style="display: none;"></div>
         <div id="loadingIndicator" class="loading-overlay" style="display: none;"><div class="spinner"></div></div>
 
-        <!-- 1. MONITORING DATANG -->
+        <!-- ============================================= -->
+        <!-- 1. PRESENSI DATANG (DENGAN SCANNER)           -->
+        <!-- ============================================= -->
         <div id="datangSection" class="content-section">
             <div class="card">
-                <div class="card-header">Siswa Hadir Hari Ini (Datang)</div>
-                <button id="refreshDatang" class="btn btn-sm btn-secondary" style="margin-bottom: 10px;">↻ Refresh Data</button>
+                <div class="card-header">Scan QR Code Siswa - Datang</div>
+                
+                <!-- BLOK SCANNER BARU -->
+                <div id="qrScannerDatang" style="width: 100%; max-width: 400px; margin: 10px auto; border-radius: var(--border-radius); overflow: hidden; background: #000;"></div>
+                <div id="scanResultDatang" class="scan-result">Arahkan kamera ke QR Code...</div>
+                
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem; border-left: 4px solid var(--primary-color); padding-left: 10px;">Log Masuk Hari Ini</h4>
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th><th>Status</th></tr></thead>
-                        <tbody id="tableBodyDatang"><tr><td colspan="4" align="center">Memuat...</td></tr></tbody>
+                        <thead><tr><th>Waktu</th><th>NISN</th><th>Nama</th></tr></thead>
+                        <tbody id="tableBodyDatang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- 2. MONITORING PULANG -->
+        <!-- ============================================= -->
+        <!-- 2. PRESENSI PULANG (DENGAN SCANNER)           -->
+        <!-- ============================================= -->
         <div id="pulangSection" class="content-section" style="display: none;">
             <div class="card">
-                <div class="card-header">Siswa Sudah Pulang Hari Ini</div>
-                <button id="refreshPulang" class="btn btn-sm btn-secondary" style="margin-bottom: 10px;">↻ Refresh Data</button>
+                <div class="card-header">Scan QR Code Siswa - Pulang</div>
+                
+                <!-- BLOK SCANNER BARU -->
+                <div id="qrScannerPulang" style="width: 100%; max-width: 400px; margin: 10px auto; border-radius: var(--border-radius); overflow: hidden; background: #000;"></div>
+                <div id="scanResultPulang" class="scan-result">Arahkan kamera ke QR Code...</div>
+
+                <h4 style="margin-top: 2rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-dark); padding-left: 10px;">Log Pulang Hari Ini</h4>
                 <div class="table-container">
                     <table>
                         <thead><tr><th>Waktu Pulang</th><th>NISN</th><th>Nama</th></tr></thead>
@@ -82,6 +96,9 @@
             </div>
         </div>
     </main>
+
+    <!-- PENTING: TAMBAHKAN LIBRARY SCANNER -->
+    <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="main.js"></script>
