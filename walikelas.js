@@ -1,5 +1,5 @@
 // File: walikelas.js
-// Versi: 2.0 (Added QR Scanner Feature)
+// Versi: 2.1 (FIXED: Scanner logic & CHANGED: Wali Kelas can scan all students in the school)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, playSound } from './utils.js';
@@ -9,7 +9,7 @@ let WaliState = {
     sekolahId: null,
     kelasAssigned: null,
     namaSekolah: '',
-    siswaDiKelas: [], // Menyimpan data siswa di kelas ini agar scan cepat
+    siswaDiSekolah: [], // PERUBAHAN: Menyimpan semua siswa di sekolah, bukan per kelas
     isScanning: false,
 };
 
@@ -26,8 +26,8 @@ export async function initWaliKelasPage() {
         .eq('id', session.user.id)
         .single();
 
-    if (error || user.role !== 'wali_kelas' || !user.kelas_assigned) {
-        alert("Akses Ditolak: Anda bukan Wali Kelas atau Kelas belum di-assign.");
+    if (error || user.role !== 'wali_kelas') {
+        alert("Akses Ditolak.");
         return handleLogout();
     }
 
@@ -35,28 +35,30 @@ export async function initWaliKelasPage() {
     WaliState.kelasAssigned = user.kelas_assigned;
     WaliState.namaSekolah = user.sekolah.nama_sekolah;
 
-    document.getElementById('welcomeMessage').textContent = `Halo, Wali Kelas ${user.kelas_assigned}`;
-    document.getElementById('infoKelasTitle').textContent = `${user.sekolah.nama_sekolah} - Kelas ${user.kelas_assigned}`;
+    document.getElementById('welcomeMessage').textContent = `Halo, Wali Kelas ${user.kelas_assigned || ''}`;
+    document.getElementById('infoKelasTitle').textContent = `${user.sekolah.nama_sekolah} - Kelas ${user.kelas_assigned || 'Semua Kelas'}`;
     
-    await loadSiswaKelas(); // Load data siswa kelas ini untuk validasi scan
+    await loadSiswaSekolah(); // PERUBAHAN: Memuat semua siswa di sekolah
     setupListeners();
     document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
 }
 
-// === FUNGSI BARU: Load siswa di kelas ini ===
-async function loadSiswaKelas() {
+// === PERUBAHAN LOGIKA DI SINI ===
+// Fungsi ini sekarang memuat SEMUA siswa di sekolah untuk validasi scan
+async function loadSiswaSekolah() {
     const { data, error } = await supabase
         .from('siswa')
         .select('nisn, nama, kelas')
-        .eq('sekolah_id', WaliState.sekolahId)
-        .eq('kelas', WaliState.kelasAssigned);
+        .eq('sekolah_id', WaliState.sekolahId);
     
     if(error) {
         console.error("Gagal memuat data siswa:", error);
         return;
     }
-    WaliState.siswaDiKelas = data;
+    WaliState.siswaDiSekolah = data;
+    console.log(`Berhasil memuat ${data.length} siswa dari sekolah ini.`);
 }
+// ===============================
 
 function setupListeners() {
     document.getElementById('logoutButton').addEventListener('click', handleLogout);
@@ -70,7 +72,7 @@ function setupListeners() {
             const target = btn.dataset.section;
             document.getElementById(target).style.display = 'block';
             
-            stopQrScanner(); // Hentikan scanner saat ganti tab
+            stopQrScanner();
 
             if(target === 'datangSection') {
                 startQrScanner('datang');
@@ -87,46 +89,49 @@ function setupListeners() {
     document.getElementById('tglRekap').value = new Date().toISOString().split('T')[0];
 }
 
-// === LOGIKA SCANNER (Diadaptasi dari dashboard.js) ===
+// === LOGIKA SCANNER ===
 function startQrScanner(type) {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().catch(err => console.warn("Clear error", err));
-        html5QrcodeScanner = null;
+    if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+        stopQrScanner();
     }
 
     const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
     
-    if (resultEl) {
-        resultEl.className = 'scan-result';
-        resultEl.textContent = "Arahkan kamera ke QR Code Siswa...";
-    }
+    if (resultEl) resultEl.className = 'scan-result';
 
     const onScanSuccess = async (decodedText) => {
         if (WaliState.isScanning) return;
         
         WaliState.isScanning = true;
-        if (html5QqrcodeScanner) html5QrcodeScanner.pause(true);
+        html5QrcodeScanner.pause(true); // PERBAIKAN TYPO DI SINI
 
         await processPresensiWali(decodedText, type);
 
         setTimeout(() => {
             WaliState.isScanning = false;
             if (html5QrcodeScanner) {
-                html5QrcodeScanner.resume();
+                try { html5QrcodeScanner.resume(); } catch(e) { console.error("Gagal resume scanner", e); }
                 if (resultEl) resultEl.innerHTML = "Siap memindai berikutnya...";
             }
         }, 2500); 
     };
 
-    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+    const config = { fps: 10, qrbox: { width: 250, height: 250 }};
     html5QrcodeScanner = new Html5QrcodeScanner(elementId, config, false);
     html5QrcodeScanner.render(onScanSuccess, () => {});
 }
 
 function stopQrScanner() {
     if (html5QrcodeScanner) {
-        try { html5QrcodeScanner.clear(); } catch (e) { console.warn(e); }
+        try {
+            if (html5QrcodeScanner.getState() === 2) { // 2 = scanning
+                html5QrcodeScanner.stop();
+            }
+            html5QrcodeScanner.clear();
+        } catch (e) {
+            console.warn("Gagal membersihkan scanner:", e);
+        }
         html5QrcodeScanner = null;
     }
 }
@@ -134,13 +139,14 @@ function stopQrScanner() {
 async function processPresensiWali(nisn, type) {
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
     
-    // Validasi: Apakah siswa ini ada di kelas yang dipegang wali kelas?
-    const siswa = WaliState.siswaDiKelas.find(s => s.nisn == nisn);
+    // === PERUBAHAN LOGIKA DI SINI ===
+    // Validasi: Apakah siswa terdaftar di sekolah ini?
+    const siswa = WaliState.siswaDiSekolah.find(s => s.nisn == nisn);
 
     if (!siswa) {
         playSound('error');
         resultEl.className = 'scan-result error';
-        resultEl.innerHTML = `<strong>GAGAL:</strong><br>Siswa dengan NISN ${nisn}<br>bukan dari kelas ${WaliState.kelasAssigned}.`;
+        resultEl.innerHTML = `<strong>GAGAL:</strong><br>Siswa dengan NISN ${nisn}<br>tidak terdaftar di sekolah ini.`;
         return;
     }
 
@@ -157,14 +163,14 @@ async function processPresensiWali(nisn, type) {
         if (logHarian) {
             playSound('error');
             resultEl.className = 'scan-result error';
-            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama}<br>Sudah absen datang.`;
+            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama} (${siswa.kelas})<br>Sudah absen datang.`;
         } else {
             const { error } = await supabase.from('presensi').insert({ nisn_siswa: nisn, waktu_datang: new Date(), sekolah_id: WaliState.sekolahId });
             if (error) { resultEl.textContent = "Gagal simpan."; } 
             else {
                 playSound('success');
                 resultEl.className = 'scan-result success';
-                resultEl.innerHTML = `<strong>BERHASIL DATANG:</strong><br>${siswa.nama}`;
+                resultEl.innerHTML = `<strong>BERHASIL DATANG:</strong><br>${siswa.nama} (${siswa.kelas})`;
                 loadDailyLog('datang');
             }
         }
@@ -172,18 +178,18 @@ async function processPresensiWali(nisn, type) {
         if (!logHarian) {
             playSound('error');
             resultEl.className = 'scan-result error';
-            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama}<br>Belum presensi datang.`;
+            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama} (${siswa.kelas})<br>Belum presensi datang.`;
         } else if (logHarian.waktu_pulang) {
             playSound('error');
             resultEl.className = 'scan-result error';
-            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama}<br>Sudah absen pulang.`;
+            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama} (${siswa.kelas})<br>Sudah absen pulang.`;
         } else {
             const { error } = await supabase.from('presensi').update({ waktu_pulang: new Date() }).eq('id', logHarian.id);
             if (error) { resultEl.textContent = "Gagal simpan."; }
             else {
                 playSound('success');
                 resultEl.className = 'scan-result success';
-                resultEl.innerHTML = `<strong>BERHASIL PULANG:</strong><br>${siswa.nama}`;
+                resultEl.innerHTML = `<strong>BERHASIL PULANG:</strong><br>${siswa.nama} (${siswa.kelas})`;
                 loadDailyLog('pulang');
             }
         }
@@ -191,6 +197,7 @@ async function processPresensiWali(nisn, type) {
 }
 
 // === LOGIKA MONITORING (Tabel) ===
+// Tabel tetap HANYA menampilkan data dari kelas yang ditugaskan
 async function loadDailyLog(type) {
     showLoading(true);
     const today = new Date();
@@ -215,7 +222,6 @@ async function loadDailyLog(type) {
         tbody.innerHTML = `<tr><td colspan="3" align="center">Belum ada data siswa ${WaliState.kelasAssigned}.</td></tr>`;
         return;
     }
-
     tbody.innerHTML = data.map(row => {
         const time = type === 'datang' ? row.waktu_datang : row.waktu_pulang;
         const timeStr = new Date(time).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
@@ -224,6 +230,7 @@ async function loadDailyLog(type) {
 }
 
 // === LOGIKA REKAP ===
+// Rekap tetap HANYA menampilkan data dari kelas yang ditugaskan
 async function loadRekap() {
     const tgl = document.getElementById('tglRekap').value;
     if (!tgl) return alert("Pilih tanggal dulu.");
@@ -246,17 +253,17 @@ async function loadRekap() {
 
     if (data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" align="center">Tidak ada data presensi pada tanggal ini.</td></tr>`;
-        return;
+    } else {
+        tbody.innerHTML = data.map(row => {
+            const jamMasuk = new Date(row.waktu_datang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+            const jamPulang = row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
+            return `<tr>
+                <td>${new Date(row.waktu_datang).toLocaleDateString('id-ID')}</td>
+                <td>${row.siswa.nama}</td>
+                <td>${jamMasuk}</td>
+                <td>${jamPulang}</td>
+                <td>${row.status || 'Hadir'}</td>
+            </tr>`;
+        }).join('');
     }
-    tbody.innerHTML = data.map(row => {
-        const jamMasuk = new Date(row.waktu_datang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
-        const jamPulang = row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
-        return `<tr>
-            <td>${new Date(row.waktu_datang).toLocaleDateString('id-ID')}</td>
-            <td>${row.siswa.nama}</td>
-            <td>${jamMasuk}</td>
-            <td>${jamPulang}</td>
-            <td>${row.status || 'Hadir'}</td>
-        </tr>`;
-    }).join('');
 }
