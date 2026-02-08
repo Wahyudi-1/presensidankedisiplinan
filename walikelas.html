@@ -7,28 +7,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     
-    <style>
-        /* Container kamera yang fix  */
-        .scanner-wrapper {
-            width: 100%;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            position: relative;
-            margin-bottom: 15px;
-        }
+            <!-- Tambahkan/Update CSS ini di <head> walikelas.html -->
+        <style>
+            /* Agar scanner pas di layar HP dan tidak gepeng */
+            .scanner-container {
+                width: 100%;
+                background: #000;
+                margin-bottom: 15px;
+                position: relative;
+                min-height: 250px; /* Tinggi minimum agar tidak jumping */
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            
+            /* Pastikan video mengisi area */
+            .scanner-container video {
+                width: 100% !important;
+                height: auto !important;
+                object-fit: cover;
+                border-radius: 12px;
+            }
         
-        /* Memaksa elemen video memenuhi container */
-        .scanner-wrapper video {
-            width: 100% !important;
-            height: auto !important;
-            display: block;
-            border-radius: 12px;
-        }
-
-        /* Menyembunyikan elemen bawaan library yang tidak perlu */
-        #qr-shaded-region { display: none !important; }
-    </style>
+            /* Hilangkan border bawaan library */
+            #qrScannerDatang, #qrScannerPulang {
+                width: 100%;
+                border: none !important;
+            }
+        </style>
 </head>
 <body>
 
