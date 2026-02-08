@@ -7,34 +7,27 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     
-    <!-- CSS Tambahan Khusus Mobile Scanner -->
     <style>
-        /* Agar scanner pas di layar HP */
-        .scanner-container {
+        /* Container kamera yang fix */
+        .scanner-wrapper {
             width: 100%;
+            background: #000;
             border-radius: 12px;
             overflow: hidden;
-            background: #000;
-            margin-bottom: 15px;
             position: relative;
-            min-height: 300px; /* Mencegah layout jumping */
+            margin-bottom: 15px;
         }
         
-        /* Tombol refresh yang mudah dipencet */
-        .btn-float-action {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            margin-bottom: 10px;
-        }
-
-        /* Penyesuaian HTML5-QRCode */
-        #qrScannerDatang video, #qrScannerPulang video {
-            object-fit: cover;
+        /* Memaksa elemen video memenuhi container */
+        .scanner-wrapper video {
+            width: 100% !important;
+            height: auto !important;
+            display: block;
             border-radius: 12px;
         }
-        /* Sembunyikan link 'HTML5-QRCode' bawaan library */
-        div[style*="text-align: center"] a { display: none; }
+
+        /* Menyembunyikan elemen bawaan library yang tidak perlu */
+        #qr-shaded-region { display: none !important; }
     </style>
 </head>
 <body>
@@ -46,9 +39,7 @@
         </div>
         <nav>
             <span id="welcomeMessage" style="font-size: 0.85rem; display: none;">...</span>
-            <button id="logoutButton" class="btn btn-sm btn-danger" style="margin-left: 10px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/></svg>
-            </button>
+            <button id="logoutButton" class="btn btn-sm btn-danger" style="margin-left: 10px;">Logout</button>
         </nav>
     </header>
 
@@ -58,7 +49,7 @@
         <small id="infoSekolahSubtitle" style="color: var(--text-light);">...</small>
     </div>
 
-    <!-- NAVIGASI TAB (STICKY) -->
+    <!-- NAVIGASI TAB -->
     <nav class="section-nav section-nav-icons">
         <button data-section="datangSection" class="btn btn-nav active">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M11.854 3.146a.5.5 0 0 0-.708 0L8 6.293 4.854 3.146a.5.5 0 1 0-.708.708L7.293 7 4.146 10.146a.5.5 0 0 0 .708.708L8 7.707l3.146 3.147a.5.5 0 0 0 .708-.708L8.707 7l3.147-3.146a.5.5 0 0 0 0-.708z"/><path d="M4 1.5a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-12a.5.5 0 0 0-.5-.5H4zM3 1.5a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 14 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 3 13.5v-12z"/></svg>
@@ -82,24 +73,18 @@
         <div id="datangSection" class="content-section">
             <div class="card">
                 <div class="card-header">Scan Masuk</div>
-                
-                <!-- Kontainer Scanner Responsif -->
-                <div class="scanner-container">
+                <div class="scanner-wrapper">
                     <div id="qrScannerDatang"></div>
                 </div>
+                <div id="scanResultDatang" class="scan-result">Siap memindai...</div>
                 
-                <div id="scanResultDatang" class="scan-result">Arahkan kamera ke QR Code...</div>
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; margin-bottom: 1rem;">
-                    <h4 style="margin: 0;">Log Masuk Hari Ini</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                    <h4>Log Masuk Hari Ini</h4>
                     <button class="btn btn-sm btn-secondary" onclick="window.refreshLog('datang')">↻ Refresh</button>
                 </div>
-                
                 <div class="table-container">
-                    <table>
-                        <thead><tr><th>Waktu</th><th>Nama</th><th>NISN</th></tr></thead>
-                        <tbody id="tableBodyDatang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
-                    </table>
+                    <tbody id="tableBodyDatang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
+                </table>
                 </div>
             </div>
         </div>
@@ -108,23 +93,18 @@
         <div id="pulangSection" class="content-section" style="display: none;">
             <div class="card">
                 <div class="card-header">Scan Pulang</div>
-                
-                <div class="scanner-container">
+                <div class="scanner-wrapper">
                     <div id="qrScannerPulang"></div>
                 </div>
+                <div id="scanResultPulang" class="scan-result">Siap memindai...</div>
 
-                <div id="scanResultPulang" class="scan-result">Arahkan kamera ke QR Code...</div>
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; margin-bottom: 1rem;">
-                    <h4 style="margin: 0;">Log Pulang Hari Ini</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                    <h4>Log Pulang Hari Ini</h4>
                     <button class="btn btn-sm btn-secondary" onclick="window.refreshLog('pulang')">↻ Refresh</button>
                 </div>
-
                 <div class="table-container">
-                    <table>
-                        <thead><tr><th>Waktu</th><th>Nama</th><th>NISN</th></tr></thead>
-                        <tbody id="tableBodyPulang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
-                    </table>
+                    <tbody id="tableBodyPulang"><tr><td colspan="3" align="center">Memuat...</td></tr></tbody>
+                </table>
                 </div>
             </div>
         </div>
@@ -139,22 +119,12 @@
                         <input type="date" id="tglRekap" class="form-control">
                     </div>
                     <div class="form-group">
-                        <label>&nbsp;</label>
                         <button id="btnCariRekap" class="btn btn-primary btn-block">Tampilkan</button>
                     </div>
                 </div>
-                <br>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Nama</th>
-                                <th>Masuk</th>
-                                <th>Pulang</th>
-                                <th>Ket</th>
-                                <th>Aksi</th>
-                            </tr>
-                        </thead>
+                <div class="table-container" style="margin-top: 15px;">
+                    <table style="width: 100%;">
+                        <thead><tr><th>Nama</th><th>Masuk</th><th>Pulang</th><th>Ket</th><th>Aksi</th></tr></thead>
                         <tbody id="tableBodyRekap"><tr><td colspan="5" align="center">Pilih tanggal...</td></tr></tbody>
                     </table>
                 </div>
@@ -162,7 +132,6 @@
         </div>
     </main>
 
-    <!-- Library yang dibutuhkan -->
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="main.js"></script>
