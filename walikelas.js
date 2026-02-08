@@ -1,5 +1,5 @@
 // File: walikelas.js
-// Versi: 4.0 (Robust Camera Switching & Core Library)
+// Versi: 4.0 (Camera Resource Fix & Mobile Optimized)
 
 import { supabase } from './config.js';
 import { showLoading, showStatusMessage, playSound } from './utils.js';
@@ -8,17 +8,22 @@ import { handleLogout } from './auth.js';
 let WaliState = {
     sekolahId: null,
     kelasAssigned: null,
+    namaSekolah: '',
     siswaDiKelas: [],
-    isProcessing: false, // Flag agar tidak double process database
-    currentScanner: null, // Menyimpan instance Html5Qrcode aktif
-    activeTab: 'datang' // Melacak tab mana yang aktif
+    isScanning: false, // Flag agar tidak double scan
 };
+
+// Variabel Global untuk Instance Scanner
+let globalQrInstance = null; 
+
+// ====================================================================
+// 1. INISIALISASI HALAMAN
+// ====================================================================
 
 export async function initWaliKelasPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return window.location.replace('index.html');
 
-    // 1. Cek User & Role
     const { data: user, error } = await supabase
         .from('pengguna')
         .select('sekolah_id, kelas_assigned, role, sekolah(nama_sekolah)')
@@ -26,69 +31,68 @@ export async function initWaliKelasPage() {
         .single();
 
     if (error || user.role !== 'wali_kelas') { 
-        alert("Akses Ditolak. Anda bukan Wali Kelas."); 
-        return handleLogout(); 
+        alert("Akses Ditolak."); return handleLogout(); 
     }
 
     WaliState.sekolahId = user.sekolah_id;
     WaliState.kelasAssigned = user.kelas_assigned;
+    WaliState.namaSekolah = user.sekolah.nama_sekolah;
 
-    // UI Update
-    document.getElementById('welcomeMessage').textContent = `Hai, ${session.user.email.split('@')[0]}`;
-    document.getElementById('welcomeMessage').style.display = 'inline';
-    document.getElementById('infoKelasTitle').textContent = `Kelas ${user.kelas_assigned || '-'}`;
+    // UI Updates
+    const welcomeEl = document.getElementById('welcomeMessage');
+    if (welcomeEl) {
+        welcomeEl.textContent = `Wali Kelas ${user.kelas_assigned}`;
+        welcomeEl.style.display = 'inline';
+    }
+    document.getElementById('infoKelasTitle').textContent = `Kelas ${user.kelas_assigned}`;
     document.getElementById('infoSekolahSubtitle').textContent = user.sekolah.nama_sekolah;
 
     await loadSiswaSekolah();
     setupListeners();
-    
-    // Auto-click tab datang
-    document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
+
+    // Trigger klik tab pertama secara otomatis (tapi tunggu DOM siap)
+    setTimeout(() => {
+        document.querySelector('.section-nav button[data-section="datangSection"]')?.click();
+    }, 500);
 }
 
 async function loadSiswaSekolah() {
     showLoading(true);
+    // Hanya load siswa di kelas yg relevan
     const { data } = await supabase.from('siswa')
-        .select('nisn, nama, kelas')
+        .select('nisn, nama, kelas, whatsapp_ortu')
         .eq('sekolah_id', WaliState.sekolahId)
         .eq('kelas', WaliState.kelasAssigned);
-    showLoading(false);
+    
     if (data) WaliState.siswaDiKelas = data;
+    showLoading(false);
 }
 
 function setupListeners() {
     document.getElementById('logoutButton').addEventListener('click', handleLogout);
 
     document.querySelectorAll('.section-nav button').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const targetSection = btn.dataset.section;
-            
-            // Cegah klik ganda pada tab yang sama
-            if (btn.classList.contains('active')) return;
+        btn.addEventListener('click', async () => {
+            // 1. Matikan Scanner Dulu Sebelum Pindah Tab (PENTING)
+            await stopQrScanner();
 
-            // UI Updates
+            // 2. Update UI Tab
             document.querySelectorAll('.section-nav button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
-            document.getElementById(targetSection).style.display = 'block';
-
-            // === LOGIKA GANTI KAMERA YANG AMAN ===
             
-            // 1. Matikan kamera yang sedang jalan (tunggu sampai benar-benar mati)
-            await stopQrScanner();
+            const targetId = btn.dataset.section;
+            const targetSection = document.getElementById(targetId);
+            targetSection.style.display = 'block'; // Tampilkan dulu elemennya
 
-            // 2. Beri jeda sedikit agar browser melepas hardware resource
-            await new Promise(r => setTimeout(r, 300));
-
-            // 3. Nyalakan kamera sesuai tab
-            if (targetSection === 'datangSection') {
-                WaliState.activeTab = 'datang';
-                startQrScanner('qrScannerDatang', 'datang');
-                loadDailyLog('datang');
-            } else if (targetSection === 'pulangSection') {
-                WaliState.activeTab = 'pulang';
-                startQrScanner('qrScannerPulang', 'pulang');
-                loadDailyLog('pulang');
+            // 3. Logika Per Tab
+            if(targetId === 'datangSection') { 
+                // Beri jeda 300ms agar DOM benar-benar render sebelum kamera nyala
+                setTimeout(() => { startQrScanner('datang'); }, 300);
+                loadDailyLog('datang'); 
+            } else if(targetId === 'pulangSection') { 
+                setTimeout(() => { startQrScanner('pulang'); }, 300);
+                loadDailyLog('pulang'); 
             }
         });
     });
@@ -99,89 +103,103 @@ function setupListeners() {
 }
 
 // ====================================================================
-// CORE CAMERA LOGIC (MENGGUNAKAN Html5Qrcode CLASS)
+// 2. LOGIKA KAMERA (PERBAIKAN UTAMA)
 // ====================================================================
 
-async function startQrScanner(elementId, type) {
+async function startQrScanner(type) {
+    const elementId = type === 'datang' ? 'qrScannerDatang' : 'qrScannerPulang';
     const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
-    if (resultEl) {
+    
+    // Reset Pesan
+    if(resultEl) {
         resultEl.className = 'scan-result';
-        resultEl.textContent = "Mengaktifkan kamera...";
+        resultEl.innerHTML = 'Memulai kamera...';
     }
 
+    // Pastikan scanner lama mati total
+    await stopQrScanner();
+
+    // Gunakan Class Html5Qrcode (Bukan Scanner UI) agar kontrol lebih baik
+    const html5QrCode = new Html5Qrcode(elementId);
+    globalQrInstance = html5QrCode; // Simpan ke global agar bisa distop nanti
+
+    const config = { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 }, 
+        aspectRatio: 1.0 
+    };
+
     try {
-        // Buat instance baru
-        const scanner = new Html5Qrcode(elementId);
-        WaliState.currentScanner = scanner;
-
-        // Config
-        const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
-        
-        // Start Scanning (Menggunakan Promise)
-        await scanner.start(
-            { facingMode: "environment" }, // Kamera Belakang
-            config,
-            (decodedText) => onScanSuccess(decodedText, type, resultEl, scanner) // Success Callback
+        // Request kamera belakang (environment)
+        await html5QrCode.start(
+            { facingMode: "environment" }, 
+            config, 
+            (decodedText) => {
+                onScanSuccess(decodedText, type, html5QrCode);
+            },
+            (errorMessage) => {
+                // Ignore frame errors
+            }
         );
-
-        if (resultEl) resultEl.textContent = "Kamera aktif. Arahkan ke QR Code.";
-        
+        if(resultEl) resultEl.innerHTML = "Arahkan kamera ke QR Code...";
     } catch (err) {
         console.error("Gagal start kamera:", err);
-        if (resultEl) resultEl.textContent = "Gagal akses kamera. Refresh halaman atau periksa izin.";
+        if(resultEl) {
+            resultEl.className = 'scan-result error';
+            resultEl.innerHTML = "Gagal akses kamera. <br>Izinkan kamera atau refresh halaman.";
+        }
     }
 }
 
 async function stopQrScanner() {
-    if (WaliState.currentScanner) {
+    if (globalQrInstance) {
         try {
-            // Cek apakah scanner sedang berjalan
-            if (WaliState.currentScanner.isScanning) {
-                await WaliState.currentScanner.stop();
+            // Cek apakah scanner sedang berjalan (isScanning)
+            if (globalQrInstance.isScanning) {
+                await globalQrInstance.stop();
             }
-            WaliState.currentScanner.clear();
+            globalQrInstance.clear();
         } catch (e) {
             console.warn("Error stopping scanner:", e);
         }
-        WaliState.currentScanner = null;
+        globalQrInstance = null;
+        WaliState.isScanning = false;
     }
 }
 
-// Callback saat QR terdeteksi
-async function onScanSuccess(decodedText, type, resultEl, scannerInstance) {
-    if (WaliState.isProcessing) return; // Debounce
-    
-    WaliState.isProcessing = true;
-    
-    // Pause kamera sementara
+async function onScanSuccess(decodedText, type, scannerInstance) {
+    // Cegah spam scan (Cooldown 2.5 detik)
+    if (WaliState.isScanning) return;
+    WaliState.isScanning = true;
+
+    // Pause UI video (opsional, memberi efek 'freeze' saat sukses)
     try { scannerInstance.pause(); } catch(e){}
 
-    await processPresensiWali(decodedText, type, resultEl);
+    await processPresensiWali(decodedText, type);
 
-    // Resume kamera setelah 2 detik
+    // Resume scanning setelah jeda
     setTimeout(() => {
-        WaliState.isProcessing = false;
-        try { 
-            // Cek apakah tab masih sama sebelum resume (kasus user pindah tab cepat)
-            if (WaliState.activeTab === type && scannerInstance === WaliState.currentScanner) {
-                scannerInstance.resume();
-                if(resultEl) resultEl.textContent = "Siap memindai berikutnya...";
-            }
-        } catch(e){}
-    }, 2000);
+        WaliState.isScanning = false;
+        try { scannerInstance.resume(); } catch(e){}
+        const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
+        if (resultEl) resultEl.innerHTML = "Siap memindai berikutnya...";
+    }, 2500);
 }
 
+
 // ====================================================================
-// LOGIKA DATABASE
+// 3. LOGIKA PRESENSI
 // ====================================================================
 
-async function processPresensiWali(nisn, type, resultEl) {
-    const siswa = WaliState.siswaDiKelas.find(s => s.nisn == nisn);
+async function processPresensiWali(nisn, type) {
+    const resultEl = document.getElementById(type === 'datang' ? 'scanResultDatang' : 'scanResultPulang');
     
+    // Cek Siswa di Kelas
+    const siswa = WaliState.siswaDiKelas.find(s => s.nisn == nisn);
     if (!siswa) {
         playSound('error');
         resultEl.className = 'scan-result error';
-        resultEl.innerHTML = `<strong>DITOLAK:</strong><br>NISN ${nisn} tidak dikenal di kelas ini.`;
+        resultEl.innerHTML = `<strong>GAGAL:</strong><br>NISN ${nisn} tidak ditemukan di kelas ini.`;
         return;
     }
 
@@ -197,7 +215,7 @@ async function processPresensiWali(nisn, type, resultEl) {
         if (logHarian) {
             playSound('error');
             resultEl.className = 'scan-result error';
-            resultEl.innerHTML = `<strong>SUDAH ABSEN:</strong><br>${siswa.nama} sudah masuk.`;
+            resultEl.innerHTML = `<strong>SUDAH ABSEN:</strong><br>${siswa.nama} sudah scan masuk.`;
         } else {
             const { error } = await supabase.from('presensi').insert({ 
                 nisn_siswa: nisn, 
@@ -215,7 +233,7 @@ async function processPresensiWali(nisn, type, resultEl) {
         if (!logHarian) {
             playSound('error');
             resultEl.className = 'scan-result error';
-            resultEl.innerHTML = `<strong>DITOLAK:</strong><br>${siswa.nama} belum absen datang.`;
+            resultEl.innerHTML = `<strong>GAGAL:</strong><br>${siswa.nama} belum scan datang hari ini.`;
         } else if (logHarian.waktu_pulang) {
             playSound('error');
             resultEl.className = 'scan-result error';
@@ -232,25 +250,29 @@ async function processPresensiWali(nisn, type, resultEl) {
     }
 }
 
+// ====================================================================
+// 4. LOAD LOG & REKAP
+// ====================================================================
+
 async function loadDailyLog(type) {
     const tableBody = document.getElementById(type === 'datang' ? 'tableBodyDatang' : 'tableBodyPulang');
-    if (!tableBody) return;
-
-    tableBody.innerHTML = `<tr><td colspan="3" align="center">...</td></tr>`;
+    if(!tableBody) return;
+    
+    tableBody.innerHTML = `<tr><td colspan="3" align="center">Memuat...</td></tr>`;
     
     const today = new Date(); today.setHours(0,0,0,0);
     let query = supabase.from('presensi')
-        .select(`waktu_datang, waktu_pulang, siswa!inner(nisn, nama)`)
+        .select(`waktu_datang, waktu_pulang, siswa!inner(nisn, nama, kelas)`)
         .eq('sekolah_id', WaliState.sekolahId)
-        .eq('siswa.kelas', WaliState.kelasAssigned) // Filter Kelas
+        .eq('siswa.kelas', WaliState.kelasAssigned)
         .gte('waktu_datang', today.toISOString())
         .order(type === 'datang' ? 'waktu_datang' : 'waktu_pulang', { ascending: false });
 
     if (type === 'pulang') query = query.not('waktu_pulang', 'is', null);
 
-    const { data } = await query;
-    if (!data || data.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="3" align="center">Kosong</td></tr>`;
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="3" align="center">Belum ada data.</td></tr>`;
         return;
     }
 
@@ -258,23 +280,23 @@ async function loadDailyLog(type) {
         const time = type === 'datang' ? row.waktu_datang : row.waktu_pulang;
         const timeStr = new Date(time).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
         return `<tr>
-            <td style="font-weight:bold;">${timeStr}</td>
-            <td>${row.siswa.nama}</td>
-            <td>${row.siswa.nisn}</td>
+            <td data-label="Waktu"><strong>${timeStr}</strong></td>
+            <td data-label="Nama">${row.siswa.nama}</td>
+            <td data-label="NISN">${row.siswa.nisn}</td>
         </tr>`;
     }).join('');
 }
 
 async function loadRekap() {
     const tgl = document.getElementById('tglRekap').value;
-    if (!tgl) return;
-    
+    if (!tgl) return showStatusMessage("Pilih tanggal.", "error");
+
     showLoading(true);
     const start = new Date(tgl); start.setHours(0,0,0,0);
     const end = new Date(tgl); end.setHours(23,59,59,999);
 
-    const { data } = await supabase.from('presensi')
-        .select(`waktu_datang, waktu_pulang, status, siswa!inner(nama, whatsapp_ortu)`)
+    const { data, error } = await supabase.from('presensi')
+        .select(`waktu_datang, waktu_pulang, status, siswa!inner(nisn, nama, kelas, whatsapp_ortu)`)
         .eq('sekolah_id', WaliState.sekolahId)
         .eq('siswa.kelas', WaliState.kelasAssigned)
         .gte('waktu_datang', start.toISOString())
@@ -283,24 +305,24 @@ async function loadRekap() {
 
     showLoading(false);
     const tbody = document.getElementById('tableBodyRekap');
-    if (!data || data.length === 0) {
+    if (error || !data.length) {
         tbody.innerHTML = `<tr><td colspan="5" align="center">Tidak ada data.</td></tr>`;
-    } else {
-        tbody.innerHTML = data.map(row => {
-            const jM = new Date(row.waktu_datang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
-            const jP = row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
-            let wa = '-';
-            if (row.siswa.whatsapp_ortu) {
-                wa = `<button class="btn btn-sm btn-success" onclick="window.sendWA('${row.siswa.nama}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang}')">WA</button>`;
-            }
-            return `<tr><td>${row.siswa.nama}</td><td>${jM}</td><td>${jP}</td><td>${row.status||'Hadir'}</td><td>${wa}</td></tr>`;
-        }).join('');
+        return;
     }
-}
 
-window.sendWA = function(nama, noHp, tglMasuk, tglPulang) {
-    let cleanHp = noHp.replace(/\D/g, '');
-    if (cleanHp.startsWith('0')) cleanHp = '62' + cleanHp.slice(1);
-    const psn = `Yth. Ortu ${nama}, Siswa hadir pukul ${new Date(tglMasuk).toLocaleTimeString('id-ID')}. Pulang: ${tglPulang ? new Date(tglPulang).toLocaleTimeString('id-ID') : 'Belum'}.`;
-    window.open(`https://api.whatsapp.com/send?phone=${cleanHp}&text=${encodeURIComponent(psn)}`, '_blank');
-};
+    tbody.innerHTML = data.map(row => {
+        const jamMasuk = new Date(row.waktu_datang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+        const jamPulang = row.waktu_pulang ? new Date(row.waktu_pulang).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
+        let waBtn = row.siswa.whatsapp_ortu 
+            ? `<button class="btn btn-sm btn-success" onclick="window.sendWA('${row.siswa.nama}', '${row.siswa.whatsapp_ortu}', '${row.waktu_datang}', '${row.waktu_pulang}')">📱</button>`
+            : '-';
+        
+        return `<tr>
+            <td data-label="Nama">${row.siswa.nama}</td>
+            <td data-label="Masuk">${jamMasuk}</td>
+            <td data-label="Pulang">${jamPulang}</td>
+            <td data-label="Ket">${row.status || 'Hadir'}</td>
+            <td data-label="Aksi">${waBtn}</td>
+        </tr>`;
+    }).join('');
+}
